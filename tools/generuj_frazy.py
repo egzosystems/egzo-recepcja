@@ -15,26 +15,28 @@ model, tokens_path, out_dir = sys.argv[1:4]
 os.makedirs(out_dir, exist_ok=True)
 
 HI = ['Dzień dobry', 'Cześć', 'Dobry wieczór']
-TAILS = ['Wrzuć dokument, a zajmę się nim.', 'Jestem gotowa, możemy działać.', 'Daj znać, w czym mogę pomóc.']
+TAILS = ['Wrzuć dokument, a od razu się nim zajmę.', 'Jestem gotowa, czekam na polecenia.', 'Daj znać, w czym mogę pomóc.']
 GODZ = {60: 'godzinę', 90: 'półtorej godziny', 120: 'dwie godziny', 180: 'trzy godziny', 240: 'cztery godziny',
         300: 'pięć godzin', 360: 'sześć godzin', 420: 'siedem godzin', 480: 'osiem godzin'}
-BREAK_T = ['Pracujesz już {g} bez przerwy. Może zrobisz sobie krótką przerwę?',
-           'Hej, to już {g} bez przerwy. Wstań na chwilę, napij się wody.']
-LINES = [f'{h}! Jestem asystentką EGZO. {t}' for h in HI for t in TAILS]
+BREAK_T = ['Szefie, pracujesz już {g} bez przerwy. Może krótka przerwa?',
+           'Szefie, to już {g} bez przerwy. Wstań na chwilę, napij się wody.']
+LINES = [f'{h}, szefie! Jestem twoją asystentką. {t}' for h in HI for t in TAILS]
 LINES += [b.format(g=g) for g in GODZ.values() for b in BREAK_T]
 LINES += [
-    'Dziękuję. Już czytam.',
-    'Gotowe. Dokument czeka na twoją akceptację.',
-    'Gotowe, przeczytałam. Czeka na twoją akceptację.',
-    'Zatwierdzone. Przenoszę do zakończonych.',
+    'Dziękuję, szefie. Już czytam.',
+    'Gotowe, szefie. Dokument czeka na twoją akceptację.',
+    'Gotowe, przeczytałam. Czeka na twoją akceptację, szefie.',
+    'Zatwierdzone, szefie. Przenoszę do zakończonych.',
     'Głos włączony.',
-    'Tak teraz brzmię.',
-    'Dobrze. Powiem ci, kiedy przyjdzie nowy e-mail.',
-    'Witaj z powrotem! Wszystko czeka na swoim miejscu.',
-    'Witaj z powrotem. Dobrze, że jesteś.',
-    'O, jesteś! Witaj z powrotem.',
-    'Masz nową wiadomość.',
+    'Tak teraz brzmię, szefie.',
+    'Dobrze, szefie. Powiem ci, kiedy przyjdzie nowy e-mail.',
+    'Witaj z powrotem, szefie! Wszystko czeka na swoim miejscu.',
+    'Witaj z powrotem, szefie. Dobrze, że jesteś.',
+    'O, jesteś, szefie! Witaj z powrotem.',
+    'Masz nową wiadomość, szefie.',
     'Chwileczkę, zastanowię się.',
+    # potwierdzenia poleceń (grają od razu, zanim wykona ruch)
+    'Już, szefie!', 'Tak jest, szefie!', 'Oczywiście, szefie.', 'Robi się, szefie!',
 ]
 
 tok = {}

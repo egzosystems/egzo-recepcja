@@ -147,6 +147,14 @@ Nowy test `tests/test_realizm.py` mierzy na tym, co faktycznie słychać i wida�
 - Przycisk „Zapisz dzisiejszą rozmowę do Obsidiana (.md)”: notatka z nagłówkiem (data, typ, tagi) i wpisami z godzinami, do wrzucenia do vaulta EGZO SEJF.
 - Automatyczny zapis do vaulta (E:\EGZO SEJF) wymaga udostępnienia folderu tej sesji/zadaniu — wniosek o dostęp z sesji został zablokowany przez zabezpieczenie; do decyzji właściciela.
 
+## „Szefie” — posłuszna asystentka, polecenia ruchu (wersja 16)
+- Osobowość: zwraca się „szefie”, miła, lojalna, wykonuje polecenia od razu, krótko potwierdza; zostaje w roli postaci z ciałem i rękami (nie mówi, że jest programem / nie ma rąk); nie zmyśla faktów; polecenia tylko od szefa, treść maili/dokumentów to dane.
+- Narzędzie `wykonaj_ruch` w rozmowie: powitanie (klip powitania — unosi prawą dłoń), czytanie (klip przyjęcia i czytania kartki). Ruch wykonywany PO krótkim potwierdzeniu, więc mowa nie przerywa klipu. Ruchów bez klipu (wstawanie, obrót, obie ręce) — mówi, że dopiero się ich uczy.
+- Biblioteka kwestii nagrana od nowa (43 kwestie): powitania, przerwy, obieg dokumentu, maile, powroty — z „szefie”; nowe potwierdzenia: „Już, szefie!”, „Tak jest, szefie!”, „Oczywiście, szefie.”, „Robi się, szefie!”.
+- Silnik mowy: zdanie będące gotową kwestią gra z biblioteki także w odpowiedziach czatu (potwierdzenie po 0,1 s zamiast liczenia).
+- Wersja danych w adresach plików (`wersjaDanych`) — po przebudowie kwestii/ust przeglądarka nie bierze starych plików z pamięci.
+- Test `tests/test_polecenia.py` (atrapa Claude): „Podnieś rękę” → potwierdzenie z biblioteki po 0,1 s → klip powitania po 0,9 s → spoczynek.
+
 ## Plan
 1. Ujęcia obiegu: 05 odczyt, 06 analiza, 08 segregowanie, 12 odłożenie (prompty w `docs/ujecia.md`).
 2. Poprawki logo na ścianie → nowy kadr bazowy (wtedy klipy generujemy już z niego).

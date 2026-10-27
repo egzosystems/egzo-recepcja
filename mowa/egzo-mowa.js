@@ -127,7 +127,7 @@ function lipTargets(m,offset,total,pcm){
 
 function utworz(opt){
   const o=Object.assign({bazaGlosu:'voice/',bazaUst:'lip/',canvas:null,glos:'mai',tempo:1,wysokosc:1.05,
-    wideo:()=>null, czekajNaSpoczynek:async()=>{}, napis:()=>{}, wyprzedzenie:.04}, opt||{});
+    wideo:()=>null, czekajNaSpoczynek:async()=>{}, napis:()=>{}, wyprzedzenie:.04, wersjaDanych:'1'}, opt||{});   // wersjaDanych: zmień po przebudowie kwestii/ust (omija starą pamięć przeglądarki)
   const zd={}; const emit=(n,...a)=>(zd[n]||[]).slice().forEach(f=>{ try{ f(...a); }catch(e){ console.error(e); } });
   const wait=ms=>new Promise(r=>setTimeout(r,ms));
   const hasTTS='speechSynthesis' in global;
@@ -174,7 +174,7 @@ function utworz(opt){
   function loadLibrary(){
     if(lib.loading) return lib.loading;
     lib.loading=(async()=>{
-      const [idx,buf]=await Promise.all([fetch(o.bazaGlosu+'frazy.json').then(r=>{if(!r.ok) throw new Error('frazy');return r.json();}),fetch(o.bazaGlosu+'frazy.wav').then(r=>{if(!r.ok) throw new Error('frazy');return r.arrayBuffer();})]);
+      const [idx,buf]=await Promise.all([fetch(o.bazaGlosu+'frazy.json?v='+o.wersjaDanych).then(r=>{if(!r.ok) throw new Error('frazy');return r.json();}),fetch(o.bazaGlosu+'frazy.wav?v='+o.wersjaDanych).then(r=>{if(!r.ok) throw new Error('frazy');return r.arrayBuffer();})]);
       const dv=new DataView(buf); let p=12;
       while(p<dv.byteLength-8){
         const id=String.fromCharCode(dv.getUint8(p),dv.getUint8(p+1),dv.getUint8(p+2),dv.getUint8(p+3)), sz=dv.getUint32(p+4,true);
@@ -199,7 +199,11 @@ function utworz(opt){
   async function pumpSpeech(){
     if(eng.busy) return; eng.busy=true; const tok=eng.tok;
     while(eng.pend.length&&tok===eng.tok){
-      const text=eng.pend.shift(); let m;
+      const text=eng.pend.shift();
+      // zdanie, które jest gotową kwestią (np. „Już, szefie!”) — gra z biblioteki, bez liczenia
+      const lc=libChunks(text);
+      if(lc){ eng.ready.push(...lc.map(c=>({...c}))); flushSpeech(); continue; }
+      let m;
       try{ m=await synthNeural(text,eng.ids); }catch(e){ continue; }
       if(tok!==eng.tok) break;
       m.text=text; eng.ready.push(m); flushSpeech();
@@ -291,8 +295,8 @@ function utworz(opt){
   const JAW_PX=5, JAW_Y0=227, JAW_CHIN=291, JAW_K=.35;
   const lip={img:null,lib:null,tory:{},segs:[],alpha:0,cur:-1,last:null,canvas:o.canvas,ctx:o.canvas?o.canvas.getContext('2d'):null,ready:null,fixes:0,frame:-1,diag:{n:0,off:0,maxOff:0}};
   lip.ready=(async()=>{ try{
-    const [libj,track]=await Promise.all([fetch(o.bazaUst+'usta-klatki.json').then(r=>r.json()),fetch(o.bazaUst+'usta-tor.json').then(r=>r.json())]);
-    const img=new Image(); img.src=o.bazaUst+'usta-klatki.webp'; await img.decode();
+    const [libj,track]=await Promise.all([fetch(o.bazaUst+'usta-klatki.json?v='+o.wersjaDanych).then(r=>r.json()),fetch(o.bazaUst+'usta-tor.json?v='+o.wersjaDanych).then(r=>r.json())]);
+    const img=new Image(); img.src=o.bazaUst+'usta-klatki.webp?v='+o.wersjaDanych; await img.decode();
     lip.fps=track.fps||24;
     for(const k in track) if(Array.isArray(track[k])&&Array.isArray(track[k][0])) lip.tory[k]=track[k];   // tor dla każdego klipu (idle, kolejne pozy…)
     lip.track=lip.tory.idle;
