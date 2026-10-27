@@ -10,7 +10,7 @@ czyta i odkłada, a wynik trafia jako notatka do Obsidiana. Docelowo rozmowa z n
 Zwykła strona bez budowania:
 
 ```bash
-python3 -m http.server 8000
+npx http-server -p 8000   # serwer z obsługą przewijania wideo
 # otwórz http://localhost:8000
 ```
 
@@ -38,6 +38,8 @@ Klawisz **L** blokuje kamerę.
 | `docs/stan-projektu.md` | decyzje, wnioski, plan |
 | `tools/clips.sh` | pętla tam-i-z-powrotem, sklejanie z domknięciem, poster |
 | `tools/find_join.py` | szukanie najlepszego miejsca sklejenia dwóch klipów |
+| `tools/seam.py` | sklejanie z interpolacją ruchu i zakończenie w klatce pętli |
+| `tools/entry_pack.py` | paczka wejść z pętli bazowej do kadru startowego |
 
 Wymagania narzędzi: `ffmpeg`, `python3` z `numpy`.
 

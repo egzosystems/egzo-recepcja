@@ -116,6 +116,7 @@ input[type=range]{accent-color:var(--gold);width:100%}
         <img id="still" alt="Asystentka EGZO przy biurku z tackami na dokumenty" src="media/egzo-poster_2026-10-27.jpg">
         <video id="vA" poster="media/egzo-poster_2026-10-27.jpg" muted playsinline preload="auto"></video>
         <video id="vB" muted playsinline preload="auto"></video>
+        <video id="vC" muted playsinline preload="auto" data-src="media/egzo-wejscia_2026-10-27.mp4"></video>
         <div class="bgblur" id="bgblur"></div>
         <div class="plate" data-t="NOWE" style="left:4.4%;width:12.4%;--p1:#9a7f66;--p2:#86694f">NOWE <i>0</i></div>
         <div class="plate" data-t="W TRAKCIE" style="left:31.3%;width:13.2%;--p1:#8a6f5a;--p2:#7a5f49">W TRAKCIE <i>0</i></div>
@@ -193,35 +194,75 @@ const SAY={"idle": "Czeka na dokumenty", "greet": "Wita", "listen": "Słucha", "
 // pierwszy klip z Gemini (Veo): pętla tam-i-z-powrotem, bez szwu
 byId.idle.src='media/egzo-idle_2026-10-27.mp4'; byId.rest.src='media/egzo-idle_2026-10-27.mp4';
 // powitanie: klip Veo + domknięcie z drugiego klipu; po nim pętla wchodzi w klatce najbliższej końcowi (11,04 s)
-byId.greet.src='media/egzo-powitanie_2026-10-27.mp4'; byId.greet.exitAt=265/24;
+byId.greet.src='media/egzo-powitanie_2026-10-27_v2.mp4'; byId.greet.exitAt=265/24;
 // przyjęcie pliku: klip Veo (ręka podaje kartkę) + powrót z kartką do pozycji
-byId.receive.src='media/egzo-obieg-1_2026-10-27.mp4'; byId.receive.exitAt=265/24;
+byId.receive.src='media/egzo-obieg-1_2026-10-27_v2.mp4'; byId.receive.exitAt=265/24;
 // obieg 1 (31,7 s): przyjęcie → czytanie (10,4 s) → analiza (21,2 s) → powrót do pozycji
 byId.receive.marks=[[10.4,'Czyta'],[21.2,'Analizuje']]; byId.read.inClip='04'; byId.analyze.inClip='04';
 
-/* ---------- Odtwarzacz z przenikaniem ---------- */
-const vA=document.getElementById('vA'), vB=document.getElementById('vB'), still=document.getElementById('still');
-let front=vA, back=vB, cur=byId.idle, queue=[], timer=null;
-function setState(s){
-  const prev=cur; cur=s; if(!statusLock) setStatus(SAY[s.id]);
+/* ---------- Odtwarzacz: przejścia dopasowane klatka w klatkę ---------- */
+// vA/vB: klipy na zmianę, vC: paczka wejść (z każdej sekundy pętli do kadru bazowego, 0,5 s)
+const vA=document.getElementById('vA'), vB=document.getElementById('vB'), vC=document.getElementById('vC'), still=document.getElementById('still');
+let front=vA, back=vB, cur=byId.idle, queue=[], timer=null, tok=0;
+const ENTRY_SEG=.5;
+function show(v,instant){
+  for(const x of [vA,vB,vC]){ x.style.transition=instant?'none':''; x.style.opacity=(x===v)?1:0; }
+  still.style.transition=instant?'none':''; still.style.opacity=v?0:1;
+}
+const once=(el,ev)=>new Promise(r=>el.addEventListener(ev,r,{once:true}));
+const frameWait=()=>new Promise(r=>requestAnimationFrame(r));
+async function ready(v,src,t){
+  if(!v.src.endsWith(src)){ v.src=src; await once(v,'loadedmetadata'); }
+  if(Math.abs(v.currentTime-t)>.01){ v.currentTime=t; await once(v,'seeked'); }
+}
+async function setState(s){
+  const prev=cur, my=++tok; cur=s; if(!statusLock) setStatus(SAY[s.id]);
   document.querySelectorAll('.clip').forEach(c=>c.classList.toggle('on',c.dataset.id===s.id));
   cam.target(s);
   clearTimeout(timer);
-  if(s.src){
-    const startAt=(s.loop&&prev&&prev.exitAt)?prev.exitAt:0;
-    back.src=s.src; back.loop=!!s.loop;
-    back.addEventListener('loadedmetadata',()=>{back.currentTime=startAt;},{once:true});
-    back.play().catch(()=>{});
-    back.style.opacity=1; front.style.opacity=0; still.style.opacity=0;
-    [front,back]=[back,front];
-    front.onended=()=>next();
-  }else{
+  if(s.loop&&!queue.length){const r=idleWaiters.splice(0);r.forEach(f=>f());}
+  if(!s.src){
     // podgląd ujęcia bez klipu (tylko ze Studia): kadr stoi, kamera wskazuje miejsce akcji
-    if(front.style.opacity!=='1'){vA.style.opacity=0; vB.style.opacity=0; still.style.opacity=1;}
+    if(front.style.opacity!=='1') show(null);
     else front.loop=true;
     if(!s.loop) timer=setTimeout(next,1600);
+    return;
   }
-  if(s.loop&&!queue.length){const r=idleWaiters.splice(0);r.forEach(f=>f());}
+  const v=back;
+  const fromIdle=!s.loop && prev && prev.loop && prev.src && front.style.opacity==='1' && vC.dataset.ok==='1';
+  const matchedExit=s.loop && prev && prev.exitAt!=null;
+  const startAt=matchedExit?prev.exitAt:0;
+  v.loop=!!s.loop; v.pause();
+  try{ await ready(v,s.src,startAt); }catch(e){}
+  if(my!==tok) return;
+  if(fromIdle){
+    // czekamy na najbliższą pełną sekundę pętli (najwyżej 1 s — jak naturalny czas reakcji)
+    const idle=front, t0=idle.currentTime;
+    let K=Math.ceil(t0+.02), segs=Math.floor(vC.duration/ENTRY_SEG);
+    if(K>=segs) K=0;
+    if(K>0){
+      try{ await ready(vC,vC.dataset.src,K*ENTRY_SEG); }catch(e){}
+      while(my===tok && !(idle.currentTime>=K || idle.currentTime<t0-1)) await frameWait();
+      if(my!==tok) return;
+      vC.play().catch(()=>{}); show(vC,true);
+      while(my===tok && vC.currentTime < K*ENTRY_SEG+ENTRY_SEG-.05 && !vC.paused) await frameWait();
+      if(my!==tok) return;
+      vC.pause();
+    }else{
+      while(my===tok && idle.currentTime>=t0-1 && idle.currentTime<idle.duration-.05) await frameWait();
+      if(my!==tok) return;
+    }
+    v.play().catch(()=>{}); await Promise.race([once(v,'playing'),new Promise(r=>setTimeout(r,400))]);
+    if(my!==tok) return; show(v,true);
+  }else if(matchedExit){
+    // koniec klipu = ta sama klatka pętli, więc przełączamy bez przenikania
+    v.play().catch(()=>{}); await Promise.race([once(v,'playing'),new Promise(r=>setTimeout(r,400))]);
+    if(my!==tok) return; show(v,true);
+  }else{
+    v.play().catch(()=>{}); show(v,false);
+  }
+  back=front; front=v;
+  front.onended=()=>{ if(my===tok) next(); };
 }
 const idleWaiters=[];
 function next(){ const n=queue.shift(); if(n) setState(byId[n]); else if(!cur.loop) setState(byId.idle); }
@@ -341,7 +382,7 @@ async function work(){
   const verb=byId.receive.src?'Przyjmuje':'Czyta';
   setStatus(`${verb} <b>${esc(d.name)}</b>`,true);
   // znaczniki w klipie: zmiana opisu w trakcie ruchu (np. przyjęcie → czytanie)
-  const mk=setInterval(()=>{const m=(cur.marks||[]).filter(([t])=>front.currentTime>=t).pop(); if(m) setStatus(`${m[1]} <b>${esc(d.name)}</b>`,true);},200);
+  const mk=setInterval(()=>{const v=[vA,vB].find(x=>x.style.opacity==='1'&&cur.src&&x.src.endsWith(cur.src)); if(!v) return; const m=(cur.marks||[]).filter(([t])=>v.currentTime>=t).pop(); if(m) setStatus(`${m[1]} <b>${esc(d.name)}</b>`,true);},200);
   await Promise.all([play(['receive','read','analyze','browse','sort']),wait(2500)]);
   clearInterval(mk);
   d.s='DO AKCEPTACJI'; refresh();
@@ -364,6 +405,7 @@ stage.addEventListener('drop',e=>{e.preventDefault();veil.hidden=true;ingest(e.d
  x.putImageData(im,0,0);const g=document.getElementById('grain');g.style.backgroundImage=`url(${c.toDataURL()})`;
  if(matchMedia('(prefers-reduced-motion: reduce)').matches)return;
  setInterval(()=>{g.style.backgroundPosition=`${Math.random()*160|0}px ${Math.random()*160|0}px`},42);})();
+vC.src=vC.dataset.src; vC.addEventListener('loadeddata',()=>{vC.dataset.ok='1';},{once:true});
 refresh(); setState(byId.idle);
 setTimeout(()=>{if(!busy.v&&cur.id==='idle')play(['greet']);},1200);
 </script>

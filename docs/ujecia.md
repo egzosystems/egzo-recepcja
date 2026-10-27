@@ -18,9 +18,9 @@ She holds the white sheet of paper in her right robotic hand at the start and at
 | Nr | Ujęcie | Status | Plik |
 |---|---|---|---|
 | 01 | Pozycja bazowa | ✅ pętla tam-i-z-powrotem | `media/egzo-idle_2026-10-27.mp4` |
-| 02 | Powitanie / mowa | ✅ sklejone z domknięciem | `media/egzo-powitanie_2026-10-27.mp4` |
+| 02 | Powitanie / mowa | ✅ sklejone z domknięciem | `media/egzo-powitanie_2026-10-27_v2.mp4` |
 | 03 | Słuchanie | do zrobienia | |
-| 04 | Przyjęcie pliku | ✅ obieg 1: 30 s z Veo, analiza cofnięta od 25 s + domknięcie | `media/egzo-obieg-1_2026-10-27.mp4` |
+| 04 | Przyjęcie pliku | ✅ obieg 1: 30 s z Veo, analiza cofnięta od 25 s + domknięcie | `media/egzo-obieg-1_2026-10-27_v2.mp4` |
 | 05 | Odczyt dokumentu | ✅ zawarte w 04 (od 10,4 s) | |
 | 06 | Analiza | ✅ zawarte w 04 (od 21,2 s) | |
 | 07 | Przeglądanie | do zrobienia | |
@@ -91,6 +91,13 @@ She leafs through the two or three sheets she is holding, flipping each page wit
 
 ## Jeśli klip nie wraca do pozycji
 
-1. `python3 tools/find_join.py nowy.mp4 source-clips/veo-02-czytanie-rozmowa_2026-10-27.mp4 --b-to 9`
-2. Weź najlepszą parę i sklej: `tools/clips.sh stitch nowy.mp4 source-clips/veo-02-... KLATKA 0.5 media/egzo-xxx_DATA.mp4`
-3. W `index.html` ustaw `byId.<ujęcie>.src` i `exitAt` (klatka pętli bazowej najbliższa końcowi klipu, zwykle 265/24).
+1. Znajdź miejsce sklejenia: `python3 tools/find_join.py nowy.mp4 source-clips/veo-02-czytanie-rozmowa_2026-10-27.mp4 --b-to 9`
+2. Sklej z interpolacją ruchu i od razu zakończ w klatce 265 pętli bazowej:
+   ```
+   python3 tools/seam.py media/egzo-xxx_DATA.mp4 \
+     source-clips/nowy.mp4:0:240 \
+     source-clips/veo-02-czytanie-rozmowa_2026-10-27.mp4:KLATKA:240 \
+     media/egzo-idle_2026-10-27.mp4:265:266 --last-segment-is-target
+   ```
+   Fragment odtwarzany wstecz: `plik:od:do:rev`; połączenie bez klatek pośrednich: dopisek `:cut`.
+3. W `index.html` ustaw `byId.<ujęcie>.src` i `exitAt=265/24`.
