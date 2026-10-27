@@ -162,6 +162,12 @@ Nowy test `tests/test_realizm.py` mierzy na tym, co faktycznie słychać i wida�
 - Dokumenty z analizą w bazie strony (`dokumenty`, tylko właściciel) — zostają po odświeżeniu, widać je na telefonie; asystentka zna ich streszczenia i dane w rozmowie.
 - Test `tests/test_dokumenty.py` + pliki `tests/pliki/` (6 typów): odczyt, obrazy, baza, notatka, mowa, pobranie — OK.
 
+## Pamięć, przypomnienia, szkice maili (wersja 18)
+- Narzędzia w rozmowie: `zapamietaj` / `zapomnij` (fakty od szefa w bazie `pamiec`, w kontekście każdej rozmowy), `przypomnij` (data i godzina lokalna; baza `przypomnienia`; sprawdzane co 20 s; zaległe ogłaszane po otwarciu strony: „Szefie, miałam ci przypomnieć o…”), `szkic_odpowiedzi` (Gmail `create_draft` jako odpowiedź na wiadomość — nigdy nie wysyła; szef sprawdza i wysyła sam).
+- `czytaj_maila` zwraca też id wiadomości (potrzebne do szkicu). Wszystkie kolekcje bazy: odczyt i zapis tylko właściciel; zapas w przeglądarce, gdy baza niedostępna.
+- Przypomnienia działają, gdy strona jest otwarta (albo po jej otwarciu) — strona nie wysyła powiadomień w tle.
+- Test `tests/test_pamiec.py` (atrapy): zapamiętanie, fakt po przeładowaniu, przypomnienie powiedziane o czasie, szkic z replyToMessageId — OK.
+
 ## Plan
 1. Ujęcia obiegu: 05 odczyt, 06 analiza, 08 segregowanie, 12 odłożenie (prompty w `docs/ujecia.md`).
 2. Poprawki logo na ścianie → nowy kadr bazowy (wtedy klipy generujemy już z niego).
