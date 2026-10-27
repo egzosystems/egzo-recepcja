@@ -436,47 +436,98 @@ stage.addEventListener('drop',e=>{e.preventDefault();veil.hidden=true;ingest(e.d
 
 
 
-/* ---------- Głos (syntezator przeglądarki, pl-PL) ---------- */
-const voice={on:false,v:null,rate:1,pitch:1.05,list:[]};
+/* ---------- Głos: neuronowy Piper „Gosia” w przeglądarce (działa też w aplikacji Claude), zapasowo syntezator systemu ---------- */
+const voice={on:false,v:null,rate:1,pitch:1.05,list:[],engine:'neural'};
 const subEl=document.getElementById('subtitle');
 const hasTTS='speechSynthesis' in window;
+const VOICE_BASE=(document.querySelector('[data-voice-base]')?.dataset.voiceBase)||'voice/';
+const neural={state:'off',worker:null,ctx:null,ready:null,pending:new Map(),seq:0,src:null};
+let sayTok=0, subTimer=null;
 function loadVoices(){
-  if(!hasTTS) return;
-  const all=speechSynthesis.getVoices(); voice.list=all.filter(v=>/^pl/i.test(v.lang));
-  const pref=[/zosia/i,/paulina/i,/ewa/i,/agnieszka/i,/maja/i,/zofia/i,/female|kobieta/i,/google/i,/natural|online|neural/i];
-  if(!voice.v||!voice.list.includes(voice.v)){
-    voice.v=null;
-    for(const r of pref){ const f=voice.list.find(v=>r.test(v.name)); if(f){voice.v=f;break;} }
-    voice.v=voice.v||voice.list[0]||null;
-  }
   const sel=document.getElementById('voiceSel');
-  sel.innerHTML=voice.list.length?voice.list.map((v,i)=>`<option value="${i}" ${v===voice.v?'selected':''}>${esc(v.name)}</option>`).join(''):'<option>brak polskiego głosu w tym urządzeniu</option>';
+  voice.list=hasTTS?speechSynthesis.getVoices().filter(v=>/^pl/i.test(v.lang)):[];
+  if(voice.engine==='system'&&!voice.list.includes(voice.v)) voice.v=voice.list[0]||null;
+  sel.innerHTML='<option value="neural">Gosia (neuronowy, w przeglądarce)</option>'+voice.list.map((v,i)=>`<option value="${i}">${esc(v.name)} (system)</option>`).join('');
+  sel.value=voice.engine==='neural'?'neural':String(voice.list.indexOf(voice.v));
 }
-if(hasTTS){ loadVoices(); speechSynthesis.addEventListener?.('voiceschanged',loadVoices); }
-document.getElementById('voiceSel').onchange=e=>{voice.v=voice.list[+e.target.value]||voice.v;};
-let subTimer=null;
+if(hasTTS){ speechSynthesis.addEventListener?.('voiceschanged',loadVoices); }
+loadVoices();
+document.getElementById('voiceSel').onchange=e=>{ if(e.target.value==='neural'){voice.engine='neural';} else {voice.engine='system'; voice.v=voice.list[+e.target.value]||null;} };
 function subtitle(t){ clearTimeout(subTimer); subEl.textContent=t||''; document.getElementById('subline').textContent=t?'„'+t+'”':''; }
-function say(text,{interrupt=true}={}){
+
+function neuralInit(){
+  if(neural.ready) return neural.ready;
+  neural.state='loading';
+  neural.ready=new Promise((res,rej)=>{
+    let w; try{ w=new Worker(VOICE_BASE+'tts-worker.js'); }catch(e){ neural.state='failed'; rej(e); return; }
+    neural.worker=w;
+    w.onmessage=e=>{
+      const m=e.data||{};
+      if(m.type==='progress'){ if(!m.cached) subtitle(`Pobieram głos (tylko za pierwszym razem, ok. 75 MB)… ${Math.round(100*m.loaded/m.total)}%`); else subtitle('Wczytuję głos…'); }
+      else if(m.type==='ready'){ neural.state='ready'; subtitle(''); res(); }
+      else if(m.type==='error'&&m.id==null){ neural.state='failed'; rej(new Error(m.message)); }
+      else if(m.id!=null){ const p=neural.pending.get(m.id); neural.pending.delete(m.id); if(p) (m.type==='audio'?p.res(m):p.rej(new Error(m.message))); }
+    };
+    w.onerror=ev=>{ neural.state='failed'; rej(new Error(ev.message||'Wątek głosu nie wystartował.')); };
+    w.postMessage({type:'init'});
+  });
+  neural.ready.catch(()=>{ neural.ready=null; });
+  return neural.ready;
+}
+function synthNeural(text){ const id=++neural.seq; return new Promise((res,rej)=>{ neural.pending.set(id,{res,rej}); neural.worker.postMessage({type:'speak',id,text,rate:voice.rate}); }); }
+function playPcm(m,tok){
+  return new Promise(r=>{
+    if(tok!==sayTok||!neural.ctx){ r(); return; }
+    const ctx=neural.ctx, buf=ctx.createBuffer(1,m.pcm.length,m.sampleRate); buf.copyToChannel(m.pcm,0);
+    const s=ctx.createBufferSource(); s.buffer=buf; s.connect(ctx.destination); neural.src=s;
+    s.onended=()=>{ if(neural.src===s) neural.src=null; r(); }; s.start();
+  });
+}
+function stopSpeech(){ sayTok++; try{neural.src?.stop();}catch(e){} neural.src=null; if(hasTTS) speechSynthesis.cancel(); }
+function sentences(t){ return (t.match(/[^.!?…]+[.!?…]*["”»]?\s*/g)||[t]).map(s=>s.trim()).filter(Boolean); }
+
+async function say(text){
+  stopSpeech(); const tok=sayTok;
   subtitle(text);
-  if(!voice.on||!hasTTS){ subTimer=setTimeout(()=>subtitle(''),Math.max(2200,text.length*70)); return Promise.resolve(); }
-  if(interrupt) speechSynthesis.cancel();
-  const u=new SpeechSynthesisUtterance(text); u.lang='pl-PL'; if(voice.v) u.voice=voice.v; u.rate=voice.rate; u.pitch=voice.pitch;
-  return new Promise(r=>{ const done=()=>{ subTimer=setTimeout(()=>subtitle(''),700); r(); }; u.onend=done; u.onerror=done; speechSynthesis.speak(u); });
+  const fin=()=>{ if(tok===sayTok) subTimer=setTimeout(()=>subtitle(''),700); };
+  if(voice.on&&voice.engine==='neural'&&neural.state==='ready'){
+    try{
+      const parts=sentences(text); let next=synthNeural(parts[0]);
+      for(let i=0;i<parts.length;i++){
+        const m=await next; if(tok!==sayTok) return;
+        next=i+1<parts.length?synthNeural(parts[i+1]):null;
+        await playPcm(m,tok); if(tok!==sayTok) return;
+      }
+      fin(); return;
+    }catch(e){ /* spada na syntezator systemu niżej */ }
+  }
+  if(voice.on&&hasTTS&&speechSynthesis.getVoices().length){
+    const u=new SpeechSynthesisUtterance(text); u.lang='pl-PL'; if(voice.v) u.voice=voice.v; u.rate=voice.rate; u.pitch=voice.pitch;
+    await new Promise(r=>{ u.onend=r; u.onerror=r; speechSynthesis.speak(u); }); fin(); return;
+  }
+  subTimer=setTimeout(()=>{ if(tok===sayTok) subtitle(''); },Math.max(2200,text.length*70));
 }
+
 const voiceBtn=document.getElementById('voiceBtn');
-function noVoice(){
-  voice.on=false; voiceBtn.setAttribute('aria-pressed',false); voiceBtn.textContent='Brak głosu tutaj';
-  hasTTS&&speechSynthesis.cancel();
-  subtitle('Ta aplikacja nie ma syntezatora mowy, więc nic nie słychać. Otwórz tę stronę w Chrome lub Safari, a usłyszysz głos.');
+function noVoice(msg){
+  voice.on=false; voiceBtn.setAttribute('aria-pressed',false); voiceBtn.textContent='Włącz głos';
+  stopSpeech(); subtitle(msg||'Nie udało się uruchomić głosu na tym urządzeniu.');
 }
-voiceBtn.onclick=()=>{
-  voice.on=!voice.on; voiceBtn.setAttribute('aria-pressed',voice.on); voiceBtn.textContent=voice.on?'Głos włączony':'Włącz głos';
-  if(!voice.on){ hasTTS&&speechSynthesis.cancel(); subtitle(''); return; }
-  if(!hasTTS){ noVoice(); return; }
-  loadVoices();
-  // niektóre aplikacje (np. Claude na Androidzie) mają obiekt mowy, ale bez żadnego głosu — wtedy nic nie słychać
-  setTimeout(()=>{ if(voice.on && !speechSynthesis.getVoices().length) noVoice(); },1500);
-  // wywołanie w kliknięciu odblokowuje mowę na telefonach; powitanie ze zgraną mową
+voiceBtn.onclick=async()=>{
+  if(voice.on){ voice.on=false; voiceBtn.setAttribute('aria-pressed',false); voiceBtn.textContent='Włącz głos'; stopSpeech(); subtitle(''); return; }
+  // kontekst audio tworzony w kliknięciu — odblokowuje dźwięk na telefonach i w aplikacji Claude
+  try{ neural.ctx=neural.ctx||new (window.AudioContext||window.webkitAudioContext)(); await neural.ctx.resume(); }catch(e){}
+  voice.on=true; voiceBtn.setAttribute('aria-pressed',true);
+  if(voice.engine==='neural'&&neural.state!=='ready'){
+    voiceBtn.textContent='Ładuję głos…';
+    try{ await neuralInit(); }
+    catch(e){
+      if(hasTTS&&speechSynthesis.getVoices().length){ voice.engine='system'; loadVoices(); }
+      else { noVoice('Nie udało się wczytać głosu: '+(e.message||e)); return; }
+    }
+  }
+  if(!voice.on) return;
+  voiceBtn.textContent='Głos włączony';
   if(!busy.v){ queue=[]; greetWithVoice(); } else say('Głos włączony.');
 };
 // w klipie powitania usta ruszają się ok. 2,2–3,6 s — kwestia startuje w tym oknie

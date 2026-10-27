@@ -25,6 +25,15 @@
 - Rozmowa: pole „Napisz do niej” → Claude (capability `sample` w artefakcie) z opisem roli i listą dokumentów → odpowiedź czytana na głos.
 - Następny krok: pętla mówienia z Veo (prompt 16 w ujecia.md), potem własny głos (np. ElevenLabs) w wersji lokalnej / Obsidian.
 
+## Głos (wersja 2): neuronowy, w przeglądarce
+- Syntezator systemu nie działa w aplikacji Claude na Androidzie, więc głos generuje sama strona.
+- Model: Piper `pl_PL-gosia-medium` (VITS, 22 050 Hz, licencja CC0), źródło: wydanie `tts-models` projektu k2-fsa/sherpa-onnx na GitHubie.
+- Wymowa: espeak-ng w WASM (`@diffusionstudio/piper-wasm`), słownik przycięty do polskiego 18 MB → 0,9 MB (`tools/trim_phonemize.py`).
+- Wykonanie: onnxruntime-web 1.17.3 (`ort.wasm-core`, jeden wątek) w Web Workerze (`voice/tts-worker.js`).
+- Model w 5 częściach po 13 MB (`voice/gosia-N.bin.wasm` — rozszerzenie .wasm tylko dlatego, że hosting artefaktów serwuje ten typ), po pierwszym pobraniu trzymany w IndexedDB.
+- Pierwsze włączenie: ok. 75 MB do pobrania; potem start w kilka sekund. Mowa generowana zdanie po zdaniu.
+- Kwantyzacja int8 sprawdzona i odrzucona: zmienia barwę głosu i liczy się ~5× wolniej.
+
 ## Plan
 1. Ujęcia obiegu: 05 odczyt, 06 analiza, 08 segregowanie, 12 odłożenie (prompty w `docs/ujecia.md`).
 2. Poprawki logo na ścianie → nowy kadr bazowy (wtedy klipy generujemy już z niego).
