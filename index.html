@@ -209,6 +209,7 @@ input[type=range]{accent-color:var(--gold);width:100%}
       <label>Głos <select id="voiceSel"></select><output></output></label>
       <label>Tempo <input type="range" id="krate" min="70" max="140" value="100"><output id="orate">1.00</output></label>
       <label>Wysokość <input type="range" id="kpitch" min="70" max="140" value="105"><output id="opitch">1.05</output></label>
+      <label>Barwa <select id="barwaSel"></select><output></output></label>
       <label>Śledzenie myszy <input type="range" id="kM" min="0" max="100" value="25"><output id="oM">0.25</output></label>
     </div>
   </aside>
@@ -699,13 +700,66 @@ function lipTargets(m,offset,total,pcm){
   return tg;
 }
 
+/* ---------- Brzmienie wypowiedzi: pauzy przy przecinkach i intonacja pytań (pomiary: tests/test_glos.py) ----------
+   Model robi przy przecinkach pauzy do 0,5 s (naturalnie 0,15–0,25 s) — skracamy cichy środek pauzy i tyle samo
+   czasu odejmujemy głoskom, więc usta dalej trafiają. Pytania tak/nie bez „czy” model czyta płasko jak
+   stwierdzenie — podnosimy ton na ostatniej sylabie (pytania „co/gdzie/jak…” po polsku opadają — bez zmian). */
+const GLOS={pauzaMax:.24, pauzaCel:.2, wznies:1.12, wzniesCzas:.36};
+// barwa: filtry po syntezie (górnoprzepustowy + [typ, częstotliwość, wzmocnienie dB, Q]); do wyboru w ustawieniach
+const BARWY={
+  miekka:{n:'Miękka (dotychczasowa)',hp:80,g:1.1,f:[['lowshelf',220,3],['peaking',3400,-4,1.4],['highshelf',9500,2.5]]},
+  ciepla:{n:'Ciepła, bliżej',hp:70,g:1.15,f:[['lowshelf',180,5],['peaking',300,1.5,.8],['peaking',3200,-5,1.2],['highshelf',9000,1]]},
+  wyrazna:{n:'Wyraźna, jaśniejsza',hp:90,g:1.05,f:[['lowshelf',220,2],['peaking',2600,2,1],['peaking',4200,-2,2],['highshelf',8500,4]]},
+  aksamitna:{n:'Aksamitna, ciemniejsza',hp:80,g:1.2,f:[['lowshelf',250,4],['peaking',2800,-6,.9],['highshelf',7000,-2]]}
+};
+function skrocPauzy(m,pcm,offset){
+  if(!m.dur||!m.chars) return {pcm,dur:m.dur};
+  const sr=m.sampleRate, hop=m.hop, off=Math.round(offset*sr), ch=m.chars, du=Float32Array.from(m.dur), n=ch.length, pre=new Float64Array(n+1);
+  for(let k=0;k<n;k++) pre[k+1]=pre[k]+du[k];
+  let peak=0; for(let i=0;i<pcm.length;i++) peak=Math.max(peak,Math.abs(pcm[i])); const th=peak*.04;
+  const cuts=[];
+  for(let k=0;k<n;k++){
+    if(!',;:'.includes(ch[k])) continue;
+    let j=k+1; while(j<n&&'_ '.includes(ch[j])) j++;
+    const L=(pre[j]-pre[k])*hop/sr; if(L<=GLOS.pauzaMax) continue;
+    const R=Math.round((L-GLOS.pauzaCel)*sr), s0=pre[k]*hop-off, s1=pre[j]*hop-off, a=Math.round((s0+s1-R)/2), b=a+R;
+    if(a<0||b>pcm.length) continue;
+    let e=0; for(let i=a;i<b;i++) e+=pcm[i]*pcm[i]; if(Math.sqrt(e/R)>th) continue;   // tylko cisza
+    cuts.push([a,b]);
+    let rest=R/hop; for(let q=k;q<j&&rest>0;q++){ const t=Math.min(du[q],rest); du[q]-=t; rest-=t; }
+  }
+  if(!cuts.length) return {pcm,dur:du};
+  const out=new Float32Array(pcm.length-cuts.reduce((s,[a,b])=>s+b-a,0)); let w=0,r=0;
+  for(const [a,b] of cuts){ out.set(pcm.subarray(r,a),w); w+=a-r; r=b; }
+  out.set(pcm.subarray(r),w);
+  return {pcm:out,dur:du};
+}
+const PYT_SZCZEG=/^(co|kto|kogo|komu|czym|gdzie|kiedy|jak|jaki|jaka|jakie|jakiego|dlaczego|czemu|ile|który|która|które|skąd|dokąd|po co|na co|o czym|z kim)\b/i;
+function pytanieTakNie(t){ t=String(t||'').trim(); if(!/\?["”»]?$/.test(t)) return false;
+  const ost=t.split(/[,–—]/).pop().trim();   // „…, dobrze?” / „…, prawda?” — dopowiedzenie zawsze wznosi
+  if(/^(dobrze|prawda|tak|zgoda|pasuje|okej|ok)\b/i.test(ost)) return true;
+  if(/^czy\b/i.test(t)) return false;        // „czy…” model już wznosi
+  return !PYT_SZCZEG.test(t); }
+// wyższy ton na ostatniej sylabie: przyspieszenie odtwarzania od początku ostatniej sylaby do środka ostatniej
+// samogłoski (czasy głosek z modelu), potem trzymane do końca; zwraca, o ile wcześniej kończy się dźwięk
+function intonacja(src,start,T,rise,m,offset){
+  if(!rise||T<.4) return 0;
+  const r=GLOS.wznies; let a=T-GLOS.wzniesCzas, b=T-GLOS.wzniesCzas*.4;
+  if(m&&m.dur&&m.chars){ const sr=m.sampleRate, hop=m.hop; let t=-(offset||0), v0=-1, v1=-1;
+    for(let k=0;k<m.chars.length;k++){ const t1=t+m.dur[k]*hop/sr; if('aąeęioóuy'.includes(m.chars[k])){ v0=t; v1=t1; } t=t1; }
+    if(v0>0&&v1<=T+.05){ a=Math.max(0,v0-.08); b=Math.min(T,(v0+v1)/2); } }
+  if(b-a<.04) b=Math.min(T,a+.08);
+  src.playbackRate.setValueAtTime(1,start+a); src.playbackRate.linearRampToValueAtTime(r,start+b);
+  return (b-a)*(1-2/(1+r))+(T-b)*(1-1/r);
+}
+
 function utworz(opt){
   const o=Object.assign({bazaGlosu:'voice/',bazaUst:'lip/',canvas:null,glos:'mai',tempo:1,wysokosc:1.05,
     wideo:()=>null, czekajNaSpoczynek:async()=>{}, napis:()=>{}, wyprzedzenie:.04, wersjaDanych:'1'}, opt||{});   // wersjaDanych: zmień po przebudowie kwestii/ust (omija starą pamięć przeglądarki)
   const zd={}; const emit=(n,...a)=>(zd[n]||[]).slice().forEach(f=>{ try{ f(...a); }catch(e){ console.error(e); } });
   const wait=ms=>new Promise(r=>setTimeout(r,ms));
   const hasTTS='speechSynthesis' in global;
-  const voice={on:false,v:null,rate:o.tempo,pitch:o.wysokosc,list:[],engine:'neural',neural:o.glos};
+  const voice={on:false,v:null,rate:o.tempo,pitch:o.wysokosc,list:[],engine:'neural',neural:o.glos,barwa:o.barwa||'miekka'};
   const neural={state:'off',worker:null,ctx:null,ready:null,pending:new Map(),seq:0,chain:null};
   const setState=s=>{ neural.state=s; emit('stan',s); };
   let sayTok=0, subTimer=null, mowi=false;
@@ -733,14 +787,16 @@ function utworz(opt){
   }
   function synthNeural(text,ids){ const id=++neural.seq; if(ids) ids.push(id); return new Promise((res,rej)=>{ neural.pending.set(id,{res,rej}); neural.worker.postMessage({type:'speak',id,text,rate:voice.rate}); }); }
   // łańcuch brzmienia: ciepły dół, przygaszona ostrość, delikatne „powietrze”, łagodna kompresja
-  function voiceChain(ctx){
-    if(neural.chain) return neural.chain;
+  function voiceChain(ctx,dest){
+    if(neural.chain&&!dest) return neural.chain;
+    const B=BARWY[voice.barwa]||BARWY.miekka;
     const f=(type,freq,gain,q)=>{const n=ctx.createBiquadFilter();n.type=type;n.frequency.value=freq;if(gain!=null)n.gain.value=gain;if(q!=null)n.Q.value=q;return n;};
-    const hp=f('highpass',80,null,.7), lo=f('lowshelf',220,3), mid=f('peaking',3400,-4,1.4), hi=f('highshelf',9500,2.5);
+    const nodes=[f('highpass',B.hp,null,.7),...B.f.map(x=>f(x[0],x[1],x[2],x[3]))];
     const comp=ctx.createDynamicsCompressor(); comp.threshold.value=-20; comp.ratio.value=2.5; comp.attack.value=.008; comp.release.value=.15; comp.knee.value=6;
-    const out=ctx.createGain(); out.gain.value=1.1;
-    hp.connect(lo); lo.connect(mid); mid.connect(hi); hi.connect(comp); comp.connect(out); out.connect(ctx.destination);
-    return neural.chain=hp;
+    const out=ctx.createGain(); out.gain.value=B.g;
+    nodes.forEach((n,i)=>n.connect(nodes[i+1]||comp)); comp.connect(out); out.connect(dest||ctx.destination);
+    if(!dest){ neural.chain=nodes[0]; neural.chainOut=out; }
+    return nodes[0];
   }
 
   /* ----- gotowe kwestie (nagrane z góry tym samym głosem) ----- */
@@ -795,13 +851,15 @@ function utworz(opt){
   }
   function scheduleSpeech(m){
     const ctx=neural.ctx; if(!ctx) return;
-    const sr=m.sampleRate, tr=trimSilence(m.pcm,sr);
+    const sr=m.sampleRate, tr0=trimSilence(m.pcm,sr), sp=skrocPauzy(m,tr0.pcm,tr0.offset+(m.pre||0));
+    const tr={pcm:sp.pcm,offset:tr0.offset}; if(sp.dur) m={...m,dur:sp.dur};
     const buf=ctx.createBuffer(1,tr.pcm.length,sr); buf.copyToChannel(tr.pcm,0);
     const s=ctx.createBufferSource(); s.buffer=buf; s.connect(voiceChain(ctx));
     const now=ctx.currentTime, cont=eng.endAt>now-.05, gap=cont?pauseAfter(eng.last):0;
     const start=Math.max(now+.06, eng.endAt+gap);
     eng.stats.push({gap:+(start-Math.max(eng.endAt,now)).toFixed(3),late:eng.endAt>0&&cont===false&&eng.stats.length>0&&eng.last?+(now-eng.endAt).toFixed(3):0,synthMs:Math.round(m.ms||0),sec:+buf.duration.toFixed(2),lib:!m.ms});
-    s.start(start); eng.endAt=start+buf.duration; eng.last=m.text||''; eng.live++;
+    const krocej=intonacja(s,start,buf.duration,pytanieTakNie(m.text),m,tr.offset+(m.pre||0));
+    s.start(start); eng.endAt=start+buf.duration-krocej; eng.last=m.text||''; eng.live++;
     lip.segs.push({t0:start,dur:buf.duration,tl:lipTimeline(m,tr.offset+(m.pre||0),buf.duration,tr.pcm,start)});
     if(lip.segs.length>16) lip.segs.shift();
     s.onended=()=>{ eng.live--; const i=eng.sources.indexOf(s); if(i>=0) eng.sources.splice(i,1); speechDone(); };
@@ -1068,11 +1126,14 @@ function utworz(opt){
       }
       voice.engine='system'; voice.v=nazwa||null; return Promise.resolve();
     },
-    ustaw(p){ if(p.tempo!=null) voice.rate=p.tempo; if(p.wysokosc!=null) voice.pitch=p.wysokosc; },
+    ustaw(p){ if(p.tempo!=null) voice.rate=p.tempo; if(p.wysokosc!=null) voice.pitch=p.wysokosc;
+      if(p.barwa&&BARWY[p.barwa]&&p.barwa!==voice.barwa){ voice.barwa=p.barwa; try{ neural.chainOut&&neural.chainOut.disconnect(); }catch(e){} neural.chain=null; neural.chainOut=null; } },
+    barwy:()=>Object.fromEntries(Object.entries(BARWY).map(([k,v])=>[k,v.n])),
+    get barwa(){ return voice.barwa; },
     glosySystemowe,
     gotoweUsta:()=>lip.ready,
     // dla testów i diagnostyki
-    wnetrze:{eng,neural,lip,lib,voice,lipFrameAt,poseFix,predictFrames,videoTime,lipShapeAt:t=>{ const x=lipFrameAt(t); return x?x.a:null; },lipTimeline,lipTargets,cfg:CFG,openT:OPEN_T,trimSilence,phonesFromChars,synthNeural,loadLibrary}
+    wnetrze:{eng,neural,lip,lib,voice,lipFrameAt,poseFix,predictFrames,videoTime,lipShapeAt:t=>{ const x=lipFrameAt(t); return x?x.a:null; },lipTimeline,lipTargets,skrocPauzy,pytanieTakNie,intonacja,glos:GLOS,barwy:BARWY,voiceChain,cfg:CFG,openT:OPEN_T,trimSilence,phonesFromChars,synthNeural,loadLibrary}
   };
   if(hasTTS) speechSynthesis.addEventListener?.('voiceschanged',()=>emit('glosy',glosySystemowe()));
   return api;
@@ -1096,8 +1157,10 @@ const mowa=EgzoMowa.utworz({
   bazaGlosu:VOICE_BASE, bazaUst:'lip/', canvas:document.getElementById('lipCanvas'),
   // usta rysujemy tylko na klipie, dla którego jest tor (dziś: pętla spoczynkowa)
   wideo:()=>({el:front, klip:front.style.opacity==='1'&&byId.idle.src&&front.src.endsWith(byId.idle.src)?'idle':null}),
-  czekajNaSpoczynek:ensureIdle, napis:subtitle, wersjaDanych:'2026-10-27-szef'
+  czekajNaSpoczynek:ensureIdle, napis:subtitle, wersjaDanych:'2026-10-27-szef', barwa:store('egzo-barwa')||'miekka'
 });
+{ const s=document.getElementById('barwaSel'); s.innerHTML=Object.entries(mowa.barwy()).map(([k,n])=>`<option value="${k}">${n}</option>`).join(''); s.value=mowa.barwa;
+  s.onchange=()=>{ mowa.ustaw({barwa:s.value}); store('egzo-barwa',s.value); if(mowa.wlaczona) say('Tak teraz brzmię, szefie.'); }; }
 const say=(t,p)=>mowa.powiedz(t,{przygotowane:p});
 const numPL=EgzoMowa.liczba;
 const {eng,neural,lip}=mowa.wnetrze, lipShapeAt=mowa.wnetrze.lipShapeAt;   // diagnostyka i testy

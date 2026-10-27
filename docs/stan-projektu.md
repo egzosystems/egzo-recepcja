@@ -168,6 +168,11 @@ Nowy test `tests/test_realizm.py` mierzy na tym, co faktycznie słychać i wida�
 - Przypomnienia działają, gdy strona jest otwarta (albo po jej otwarciu) — strona nie wysyła powiadomień w tle.
 - Test `tests/test_pamiec.py` (atrapy): zapamiętanie, fakt po przeładowaniu, przypomnienie powiedziane o czasie, szkic z replyToMessageId — OK.
 
+## Głos: pauzy, intonacja, barwa (wersja 19)
+- Pomiar (`tests/test_glos.py`, dźwięk z przeglądarki): pauzy przy przecinkach do 0,49 s → skracane do 0,2 s (cichy środek pauzy wycinany, tyle samo czasu odejmowane głoskom — usta dalej trafiają, Δ 0 ms).
+- Pytania tak/nie bez „czy” („Wysłać to teraz?”, „…, dobrze?”) model czytał płasko (+1%) → ton podnoszony na ostatniej sylabie (od początku ostatniej sylaby do środka ostatniej samogłoski, wg czasów głosek): +11…+25%. Pytania „co/gdzie/jak…” i z „czy” — bez zmian (opadają / model już wznosi).
+- Barwa do wyboru w ustawieniach głosu (zapamiętana w przeglądarce): Miękka (dotychczasowa), Ciepła, Wyraźna, Aksamitna — środek widma 555 / 496 / 627 / 463 Hz.
+
 ## Plan
 1. Ujęcia obiegu: 05 odczyt, 06 analiza, 08 segregowanie, 12 odłożenie (prompty w `docs/ujecia.md`).
 2. Poprawki logo na ścianie → nowy kadr bazowy (wtedy klipy generujemy już z niego).
