@@ -464,11 +464,18 @@ function say(text,{interrupt=true}={}){
   return new Promise(r=>{ const done=()=>{ subTimer=setTimeout(()=>subtitle(''),700); r(); }; u.onend=done; u.onerror=done; speechSynthesis.speak(u); });
 }
 const voiceBtn=document.getElementById('voiceBtn');
+function noVoice(){
+  voice.on=false; voiceBtn.setAttribute('aria-pressed',false); voiceBtn.textContent='Brak głosu tutaj';
+  hasTTS&&speechSynthesis.cancel();
+  subtitle('Ta aplikacja nie ma syntezatora mowy, więc nic nie słychać. Otwórz tę stronę w Chrome lub Safari, a usłyszysz głos.');
+}
 voiceBtn.onclick=()=>{
   voice.on=!voice.on; voiceBtn.setAttribute('aria-pressed',voice.on); voiceBtn.textContent=voice.on?'Głos włączony':'Włącz głos';
   if(!voice.on){ hasTTS&&speechSynthesis.cancel(); subtitle(''); return; }
-  if(!hasTTS){ subtitle('To urządzenie nie ma syntezatora mowy.'); return; }
+  if(!hasTTS){ noVoice(); return; }
   loadVoices();
+  // niektóre aplikacje (np. Claude na Androidzie) mają obiekt mowy, ale bez żadnego głosu — wtedy nic nie słychać
+  setTimeout(()=>{ if(voice.on && !speechSynthesis.getVoices().length) noVoice(); },1500);
   // wywołanie w kliknięciu odblokowuje mowę na telefonach; powitanie ze zgraną mową
   if(!busy.v){ queue=[]; greetWithVoice(); } else say('Głos włączony.');
 };
