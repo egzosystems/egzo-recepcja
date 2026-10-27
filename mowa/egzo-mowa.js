@@ -18,23 +18,302 @@
 (function (global) {
 'use strict';
 
-/* ---------- Liczby i tekst do czytania (model Mai czyta tylko litery) ---------- */
-function numPL(n){
-  const j=['zero','jeden','dwa','trzy','cztery','pięć','sześć','siedem','osiem','dziewięć','dziesięć','jedenaście','dwanaście','trzynaście','czternaście','piętnaście','szesnaście','siedemnaście','osiemnaście','dziewiętnaście'];
-  const d=['','','dwadzieścia','trzydzieści','czterdzieści','pięćdziesiąt','sześćdziesiąt','siedemdziesiąt','osiemdziesiąt','dziewięćdziesiąt'];
-  const s=['','sto','dwieście','trzysta','czterysta','pięćset','sześćset','siedemset','osiemset','dziewięćset'];
-  const under1000=x=>{const r=[];if(x>=100){r.push(s[Math.floor(x/100)]);x%=100;} if(x>=20){r.push(d[Math.floor(x/10)]);x%=10;if(x)r.push(j[x]);} else if(x||!r.length) r.push(j[x]); return r.join(' ');};
-  if(n<1000) return under1000(n);
-  if(n<1000000){ const t=Math.floor(n/1000), rest=n%1000;
-    const tw=t===1?'tysiąc':under1000(t)+' '+((t%10>=2&&t%10<=4&&(t%100<12||t%100>14))?'tysiące':'tysięcy');
-    return rest?tw+' '+under1000(rest):tw; }
-  return String(n).split('').map(c=>j[+c]).join(' ');
+/* NORMALIZACJA-START */
+/* ---------- Tekst do czytania (model Mai czyta tylko litery) ----------
+   Liczby, daty, godziny, kwoty, telefony, jednostki, skróty, skrótowce i słowa obce → polskie słowa.
+   Zasady odmiany: liczebnik w dopełniaczu po „do/od/około/bez/dla/z/u/spośród/ponad…”; jednostka po liczbie
+   w formie zgodnej z liczbą (1 złoty, 2 złote, 5 złotych; ułamek → dopełniacz l.poj.: 1,5 metra).
+   Sprawdzane testem: tests/test_normalizacja.js (przykłady) i tests/test_wymowa.py (rozpoznawanie mowy Whisperem). */
+const N_J=['zero','jeden','dwa','trzy','cztery','pięć','sześć','siedem','osiem','dziewięć','dziesięć','jedenaście','dwanaście','trzynaście','czternaście','piętnaście','szesnaście','siedemnaście','osiemnaście','dziewiętnaście'];
+const N_D=['','','dwadzieścia','trzydzieści','czterdzieści','pięćdziesiąt','sześćdziesiąt','siedemdziesiąt','osiemdziesiąt','dziewięćdziesiąt'];
+const N_S=['','sto','dwieście','trzysta','czterysta','pięćset','sześćset','siedemset','osiemset','dziewięćset'];
+// dopełniacz (do pięciu, od dwóch…)
+const G_J=['zera','jednego','dwóch','trzech','czterech','pięciu','sześciu','siedmiu','ośmiu','dziewięciu','dziesięciu','jedenastu','dwunastu','trzynastu','czternastu','piętnastu','szesnastu','siedemnastu','osiemnastu','dziewiętnastu'];
+const G_D=['','','dwudziestu','trzydziestu','czterdziestu','pięćdziesięciu','sześćdziesięciu','siedemdziesięciu','osiemdziesięciu','dziewięćdziesięciu'];
+const G_S=['','stu','dwustu','trzystu','czterystu','pięciuset','sześciuset','siedmiuset','ośmiuset','dziewięciuset'];
+// liczebniki porządkowe: rodzaj męski mianownik / dopełniacz (daty: piętnasty, piętnastego), żeński (godziny: czternasta, czternastej, czternastą)
+const O_J=['zerowy','pierwszy','drugi','trzeci','czwarty','piąty','szósty','siódmy','ósmy','dziewiąty','dziesiąty','jedenasty','dwunasty','trzynasty','czternasty','piętnasty','szesnasty','siedemnasty','osiemnasty','dziewiętnasty'];
+const O_D=['','','dwudziesty','trzydziesty','czterdziesty','pięćdziesiąty','sześćdziesiąty','siedemdziesiąty','osiemdziesiąty','dziewięćdziesiąty'];
+const O_S=['','setny','dwusetny','trzechsetny','czterechsetny','pięćsetny','sześćsetny','siedemsetny','osiemsetny','dziewięćsetny'];
+// odmiana porządkowego: końcówka -y/-i → przypadek (m: mianownik, g: dopełniacz m., f: ż. mianownik, fg: ż. dopełniacz/miejscownik, fi: ż. narzędnik)
+function ordForm(w,c){
+  if(c==='m') return w;
+  const soft=/i$/.test(w), stem=w.slice(0,-1);
+  if(c==='g') return stem+(soft?'iego':'ego');
+  if(c==='f') return stem+(soft?'ia':'a');
+  if(c==='fg') return stem+(soft?'iej':'ej');
+  if(c==='fi') return stem+(soft?'ią':'ą');
+  if(c==='l') return stem+(soft?'im':'ym');
+  return w;
 }
+function under1000(x,g){ const J=g?G_J:N_J, D=g?G_D:N_D, S=g?G_S:N_S, r=[];
+  if(x>=100){ r.push(S[Math.floor(x/100)]); x%=100; }
+  if(x>=20){ r.push(D[Math.floor(x/10)]); x%=10; if(x) r.push(J[x]); } else if(x||!r.length) r.push(J[x]);
+  return r.join(' '); }
+// rzeczowniki żeńskie (po liczbie: jedna, dwie): tematy słów
+const ZENSKIE=/^(osob|sztuk|godzin|minut|sekund|faktur|wiadomoś|ofert|paczk|płyt|stron|rzecz|spraw|notatk|umow|firm|ton[ay]?$|dob[ay]$|wersj|częś|kopi|rozmow|szafk|półk|szuflad|desk|listw|zmian|poprawk|uwag|prośb|opcj|propozycj|wycen|dostaw|przesyłk|wizyt|rat[ay]?$|kwot|pozycj|noc|kobiet|pani|klientk|sesj|lekcj|reklamacj|wpłat|płatnoś|transakcj|kategori|zakładk|kart|lini|tras|drog|książk|figurk|butelk|puszk|lamp|kamer|drukark|maszyn|frezark|pił|wiertark|krawędz|tablic|płytk|ściank|wnęk|szyb|ścian|klatk|skrzyn|kostk|część|tygodniówk|zaliczk|faktur|fotografi|dziewczyn|córk|siostr)/i;
+const zenska=w=>ZENSKIE.test(w||'');
+// liczba w rodzaju żeńskim: …jeden → jedna (tylko samo 1), …dwa → dwie (poza 12)
+function numZ(n,txt){ if(n===1) return 'jedna'; if(n%10===2&&n%100!==12) return txt.replace(/dwa$/,'dwie'); return txt; }
+// forma rzeczownika po liczbie: [1, 2–4, 5+] (12–14 → 5+)
+function formaPo(n,f){ if(n===1) return f[0]; const a=n%10, b=n%100; return a>=2&&a<=4&&(b<12||b>14)?f[1]:f[2]; }
+const RZEDY=[[1e9,['miliard','miliardy','miliardów'],'miliarda','miliardów'],[1e6,['milion','miliony','milionów'],'miliona','milionów'],[1e3,['tysiąc','tysiące','tysięcy'],'tysiąca','tysięcy']];
+function numPL(n,g){
+  n=Math.floor(Math.abs(n));
+  if(n>=1e12) return String(n).split('').map(c=>N_J[+c]).join(' ');
+  if(n<1000) return under1000(n,g);
+  for(const [v,f,g1,gp] of RZEDY){ if(n>=v){ const t=Math.floor(n/v), rest=n%v;
+    const tw=t===1?(g?g1:f[0]):under1000(t,g)+' '+(g?gp:formaPo(t,f));
+    return rest?tw+' '+numPL(rest,g):tw; } }
+  return under1000(n,g);
+}
+// porządkowy (do 2099 w latach: dwa tysiące dwudziesty szósty)
+function ordPL(n,c){
+  const parts=[];
+  if(n>=1000){ const t=Math.floor(n/1000); n%=1000;
+    if(!n) return ordForm(t===1?'tysięczny':numPL(t)+'tysięczny',c);   // rzadkie
+    parts.push(t===1?'tysiąc':numPL(t*1000)); }
+  if(n>=100){ const s=Math.floor(n/100); n%=100; if(!n){ parts.push(ordForm(O_S[s],c)); return parts.join(' '); } parts.push(N_S[s]); }
+  if(n>=20){ const d=Math.floor(n/10), j=n%10; parts.push(ordForm(O_D[d],c)); if(j) parts.push(ordForm(O_J[j],c)); }
+  else parts.push(ordForm(O_J[n],c));
+  return parts.join(' ');
+}
+const MIES=['stycznia','lutego','marca','kwietnia','maja','czerwca','lipca','sierpnia','września','października','listopada','grudnia'];
+// jednostki: [1, 2–4, 5+, ułamek (dopełniacz l.poj.)]
+const JEDN={
+  'zł':['złoty','złote','złotych','złotego'],'pln':['złoty','złote','złotych','złotego'],
+  'gr':['grosz','grosze','groszy','grosza'],'€':['euro','euro','euro','euro'],'eur':['euro','euro','euro','euro'],
+  '$':['dolar','dolary','dolarów','dolara'],'usd':['dolar','dolary','dolarów','dolara'],
+  'mm':['milimetr','milimetry','milimetrów','milimetra'],'cm':['centymetr','centymetry','centymetrów','centymetra'],
+  'm':['metr','metry','metrów','metra'],'km':['kilometr','kilometry','kilometrów','kilometra'],
+  'm2':['metr kwadratowy','metry kwadratowe','metrów kwadratowych','metra kwadratowego'],'m²':['metr kwadratowy','metry kwadratowe','metrów kwadratowych','metra kwadratowego'],
+  'm3':['metr sześcienny','metry sześcienne','metrów sześciennych','metra sześciennego'],'m³':['metr sześcienny','metry sześcienne','metrów sześciennych','metra sześciennego'],
+  'cm2':['centymetr kwadratowy','centymetry kwadratowe','centymetrów kwadratowych','centymetra kwadratowego'],
+  'kg':['kilogram','kilogramy','kilogramów','kilograma'],'g':['gram','gramy','gramów','grama'],'t':['tona','tony','ton','tony'],
+  'l':['litr','litry','litrów','litra'],'ml':['mililitr','mililitry','mililitrów','mililitra'],
+  'szt':['sztuka','sztuki','sztuk','sztuki'],'szt.':['sztuka','sztuki','sztuk','sztuki'],
+  'h':['godzina','godziny','godzin','godziny'],'godz':['godzina','godziny','godzin','godziny'],'godz.':['godzina','godziny','godzin','godziny'],
+  'min':['minuta','minuty','minut','minuty'],'min.':['minuta','minuty','minut','minuty'],'s':['sekunda','sekundy','sekund','sekundy'],
+  'mies':['miesiąc','miesiące','miesięcy','miesiąca'],'mies.':['miesiąc','miesiące','miesięcy','miesiąca'],
+  'tys':['tysiąc','tysiące','tysięcy','tysiąca'],'tys.':['tysiąc','tysiące','tysięcy','tysiąca'],
+  'mln':['milion','miliony','milionów','miliona'],'mld':['miliard','miliardy','miliardów','miliarda'],
+  '°c':['stopień Celsjusza','stopnie Celsjusza','stopni Celsjusza','stopnia Celsjusza'],'°':['stopień','stopnie','stopni','stopnia'],
+  'w':['wat','waty','watów','wata'],'kw':['kilowat','kilowaty','kilowatów','kilowata'],'kwh':['kilowatogodzina','kilowatogodziny','kilowatogodzin','kilowatogodziny'],
+  'mb':['megabajt','megabajty','megabajtów','megabajta'],'gb':['gigabajt','gigabajty','gigabajtów','gigabajta'],'kb':['kilobajt','kilobajty','kilobajtów','kilobajta'],
+  'km/h':['kilometr na godzinę','kilometry na godzinę','kilometrów na godzinę','kilometra na godzinę'],
+  'r.':['rok','lata','lat','roku'],'%':['procent','procent','procent','procent']
+};
+// dopełniacz l.mn. jednostki (po liczebniku w dopełniaczu: do pięciu złotych, od dwóch metrów)
+const JEDN_GPL={'złoty':'złotych','grosz':'groszy','euro':'euro','dolar':'dolarów','sztuka':'sztuk','godzina':'godzin','minuta':'minut','sekunda':'sekund','tona':'ton','procent':'procent','rok':'lat','kilowatogodzina':'kilowatogodzin'};
+const unitGenPl=f=>JEDN_GPL[f[0]]||f[2];
+const JEDN_Z=new Set(['sztuka','godzina','minuta','sekunda','tona','kilowatogodzina']);
+// skróty (z kropką lub bez) → słowa
+const SKROTY=[
+  [/\bnp\./gi,'na przykład'],[/\bm\.\s?in\./gi,'między innymi'],[/\bitd\./gi,'i tak dalej'],[/\bitp\./gi,'i tym podobne'],
+  [/\btj\./gi,'to jest'],[/\btzn\./gi,'to znaczy'],[/\btzw\./gi,'tak zwany'],[/\bwg\b\.?/gi,'według'],[/\bws\./gi,'w sprawie'],
+  [/\bdot\./gi,'dotyczy'],[/\bzob\./gi,'zobacz'],[/\bpw\./gi,'pod wezwaniem'],[/\bul\./gi,'ulica'],[/\bal\./gi,'aleja'],[/\bpl\.(?=\s+[A-ZĄĆĘŁŃÓŚŹŻ])/g,'plac'],
+  [/\bos\.(?=\s+[A-ZĄĆĘŁŃÓŚŹŻ])/g,'osiedle'],[/\btel\./gi,'telefon'],[/\btel\b/gi,'telefon'],[/\bkom\./gi,'komórka'],[/\bnr\b\.?/gi,'numer'],
+  [/(?<!\d\s?)\bgodz\.(?!\s*\d)/gi,'godzina'],[/(?<!\d\s?)\bmin\./gi,'minimum'],[/\bmaks\.|\bmax\./gi,'maksymalnie'],[/\bpn\.(?=\s|$)/g,'poniedziałek'],[/\bwt\.(?=\s|$)/g,'wtorek'],
+  [/\bśr\.(?=\s|$)/g,'środa'],[/\bczw\.(?=\s|$)/g,'czwartek'],[/\bpt\.(?=\s|$)/g,'piątek'],[/\bsob\.(?=\s|$)/g,'sobota'],[/\bndz\.|\bnd\.(?=\s|$)/g,'niedziela'],
+  [/\bsp\.\s?z\s?o\.\s?o\./gi,'spółka z o o'],[/\bs\.\s?c\./gi,'spółka cywilna'],[/\bS\.A\./g,'es a'],[/\bp\.\s?s\./gi,'post scriptum'],
+  [/\bpkt\b\.?/gi,'punkt'],[/\bstr\./gi,'strona'],[/\bwz\.|\bw\.z\./gi,'wzór'],[/\bzał\./gi,'załącznik'],[/\bpoz\./gi,'pozycja'],
+  [/\bproc\./gi,'procent'],[/\bjw\./gi,'jak wyżej'],[/\bb\.\s?d\./gi,'brak danych'],[/\bwył\./gi,'wyłącznie'],[/\bwzgl\./gi,'względnie'],
+  [/\bmgr\b\.?/gi,'magister'],[/\binż\./gi,'inżynier'],[/\bdr\b\.?(?=\s+[A-ZĄĆĘŁŃÓŚŹŻ])/g,'doktor'],[/\bprof\./gi,'profesor'],[/\bp\.(?=\s+[A-ZĄĆĘŁŃÓŚŹŻ][a-ząćęłńóśźż])/g,'pan'],
+  [/\bdn\.(?=\s*\d)/gi,'dnia'],[/\bok\.(?=\s*\d)/gi,'około'],[/\bok\.(?=\s+[a-ząćęłńóśźż])/g,'około'],[/\bw\.(?=\s|$)/g,'wieku']
+];
+// słowa obce i nazwy własne: zapis → wymowa (całe słowa, bez wielkości liter)
+const OBCE={
+  'e-mail':'imejl','e-maila':'imejla','e-mailem':'imejlem','e-maile':'imejle','e-maili':'imejli','e-mailu':'imejlu','e-mailach':'imejlach','e-mailowy':'imejlowy',
+  'email':'imejl','emaila':'imejla','emailem':'imejlem','emaile':'imejle','emaili':'imejli','emailu':'imejlu',
+  'mail':'mejl','maila':'mejla','mailem':'mejlem','maile':'mejle','maili':'mejli','mailu':'mejlu','mailach':'mejlach','mailowy':'mejlowy','mailowo':'mejlowo','mailing':'mejling',
+  'gmail':'dżimejl','gmaila':'dżimejla','gmailu':'dżimejlu','gmailem':'dżimejlem','outlook':'autluk','outlooku':'autluku',
+  'excel':'ekscel','excela':'ekscela','excelu':'ekscelu','excelem':'ekscelem','word':'łord','worda':'łorda','wordzie':'łordzie','powerpoint':'pałerpojnt',
+  'google':'gugl','googla':'gugla','googlu':'guglu','youtube':'jutub','facebook':'fejsbuk','facebooka':'fejsbuka','facebooku':'fejsbuku',
+  'whatsapp':'łotsap','whatsappie':'łotsapie','messenger':'mesendżer','messengerze':'mesendżerze',
+  'iphone':'ajfon','iphone\'a':'ajfona','windows':'łindołs','windowsie':'łindołsie','mac':'mek','macbook':'mekbuk',
+  'online':'onlajn','offline':'oflajn','newsletter':'niusleter','feedback':'fidbek','deadline':'dedlajn','deadline\'u':'dedlajnu',
+  'ok':'okej','okay':'okej','okey':'okej','sorry':'sori','weekend':'łikend','weekendu':'łikendu','weekendzie':'łikendzie',
+  'zoom':'zum','zoomie':'zumie','teams':'tims','teamsach':'timsach','slack':'slak','dropbox':'dropboks','onedrive':'łandrajw','drive':'drajw',
+  'claude':'klod','claude\'a':'kloda','chatgpt':'czat dżi pi ti',
+  'notion':'nołszyn','canva':'kanwa','wifi':'łifi','wi-fi':'łifi','bluetooth':'blutuf',
+  'systems':'sistems','software':'softłer','hardware':'hardłer','backup':'bekap','update':'apdejt','password':'pasłord',
+  'leasing':'lizing','leasingu':'lizingu','manager':'menedżer','team':'tim','meeting':'miting','call':'kol',
+  'pdf-a':'pe de efa','pdf-ie':'pe de efie','pdfa':'pe de efa','pdfie':'pe de efie','jpg':'jot peg','jpeg':'jot peg','png':'pe en gie','csv':'ce es fał',
+  'www':'wu wu wu','http':'ha te te pe','https':'ha te te pe es','.pl':'kropka pe el','.com':'kropka kom'
+};
+// skrótowce czytane jak słowa (reszta wielkimi literami: literowanie)
+const SLOWA_SKROTOWCE=new Set(['NIP','VAT','PESEL','REGON','ZUS','NATO','PIT','CIT','RODO','GUS','KRUS','PIN','EGZO','PEFRON','PFRON','NBP','UNESCO','ONZ','LOT','PEKAO','ORLEN','IKEA','OBI','LIDL','ALDI','NASA','FIFA','UEFA','COVID','LED','RAM','ROM','ZOO','SEJF','PILNE','UWAGA','NOWE','HIT','TOP','BOSS']);
+const LITERY={A:'a',Ą:'ą',B:'be',C:'ce',Ć:'cie',D:'de',E:'e',Ę:'ę',F:'ef',G:'gie',H:'ha',I:'i',J:'jot',K:'ka',L:'el',Ł:'eł',M:'em',N:'en',Ń:'eń',O:'o',Ó:'o',P:'pe',Q:'ku',R:'er',S:'es',Ś:'eś',T:'te',U:'u',V:'fał',W:'wu',X:'iks',Y:'igrek',Z:'zet',Ź:'ziet',Ż:'żet'};
+const SKROTOWCE_WYM={OK:'okej',AI:'a i',IT:'aj ti',USB:'u es be',CEO:'si i oł',HR:'ha er',PR:'pi ar',SEO:'seo',URL:'u er el',API:'a pe i',UI:'u i',TV:'te fał',PC:'pe ce',GPS:'gie pe es',DVD:'de fał de',CD:'ce de',SMS:'es em es',MMS:'em em es',PDF:'pe de ef',CRM:'ce er em',FAQ:'ef a ku',BHP:'be ha pe',KRS:'ka er es',NFZ:'en ef zet',USA:'u es a',UE:'u e',PKO:'pe ka o',PKP:'pe ka pe',PKS:'pe ka es',PZU:'pe zet u',DHL:'de ha el',DPD:'de pe de',GLS:'gie el es',UPS:'u pe es',OLX:'o el iks',AGD:'a gie de',RTV:'er te fał',LPG:'el pe gie',ID:'aj di',QR:'ku er',XL:'iks el',XXL:'iks iks el',SUV:'es u fał',MDF:'em de ef',OSB:'o es be',PCV:'pe ce fał',PVC:'pe fał ce',HDF:'ha de ef',CNC:'ce en ce',UV:'u fał',RGB:'er gie be',LCD:'el ce de',SSD:'es es de',HDD:'ha de de',CV:'ce fał',VIP:'wip',B2B:'bi tu bi',B2C:'bi tu si',ASAP:'ejsap',FYI:'ef y aj',PS:'post scriptum'};
+function literuj(s){ return s.split('').map(c=>LITERY[c]||c.toLowerCase()).join(' '); }
+// granice słów z polskimi literami (\b w JS zna tylko ASCII)
+const L_='A-Za-zĄĆĘŁŃÓŚŹŻąćęłńóśźżÀ-ž';
+const W0=`(?<![${L_}\\d])`, W1=`(?![${L_}\\d])`;
+for(let i=0;i<SKROTY.length;i++){ const [re,w]=SKROTY[i]; SKROTY[i]=[new RegExp(re.source.replace(/^\\b|(?<=^\(\?<!\\d\\s\?\))\\b/,W0),re.flags),w]; }
+// przyimki, po których liczebnik idzie w dopełniaczu / narzędniku / miejscowniku
+const PRZ_GEN=new RegExp(`(?:^|[\\s(,])(do|od|około|bez|dla|z|ze|u|spośród|wśród|ponad|powyżej|poniżej|blisko|koło|zamiast|oprócz|według|sprzed|obok|wokół|podczas|w ciągu|w wysokości|w kwocie|kosztem|brakuje|nie ma|mniej niż|więcej niż)\\s*$`,'i');
+const PRZ_NARZ=/(?:^|[\s(,])(przed|za|nad|pod|między|pomiędzy)\s*$/i;
+const PRZ_MIEJSC=/(?:^|[\s(,])(o|po|przy)\s*$/i;
+const KONTEKST_TEL=/(tel\.?|telefon\w*|numer\w*|nr|kom\.?|komórk\w*|zadzwoń|dzwoń|kontakt\w*|infolinia|faks|fax|sms\w*|whatsapp|pod numer\w*)[\s:.]*$/i;
+const cyfry=x=>x.split('').map(c=>N_J[+c]).join(' ');
+const grupaTel=x=>x[0]==='0'?cyfry(x):numPL(+x);
+// ułamek dziesiętny: 1,5 → półtora; 2,5 → dwa i pół; inaczej „przecinek”
+function ulamek(a,fr,gen){ const n=+a;
+  if(fr==='5'){ if(n===0) return 'pół'; if(n===1) return 'półtora'; return (gen?numPL(n,true):numPL(n))+' i pół'; }
+  return (gen?numPL(n,true):numPL(n))+' przecinek '+(fr[0]==='0'?cyfry(fr):numPL(+fr)); }
 function spokenPL(t){
-  return t.replace(/(\d+)\s*[x×]\s*(\d+)/g,'$1 na $2').replace(/(\d+)[,.](\d+)/g,'$1 przecinek $2')
-          .replace(/\d+/g,m=>numPL(+m)).replace(/[_/]+/g,' ').replace(/%/g,' procent').replace(/\s+/g,' ');
+  if(!t) return '';
+  let s=String(t);
+  const pre=(str,off)=>str.slice(Math.max(0,off-40),off);
+  // 1) wygląd tekstu: Markdown, linki, emotikony, punktory
+  s=s.replace(/```[\s\S]*?```/g,' ').replace(/`([^`]*)`/g,'$1').replace(/!\[[^\]]*\]\([^)]*\)/g,' ')
+     .replace(/\[([^\]]+)\]\((?:[^)]*)\)/g,'$1').replace(/^\s{0,3}#{1,6}\s*/gm,'').replace(/^\s*[-*•·▪►]\s+/gm,'').replace(/^\s*(\d+)[.)]\s+(?=\D)/gm,'')
+     .replace(/\*\*([^*]+)\*\*|__([^_]+)__/g,(m,a,b)=>a||b).replace(/(^|\s)[*_]([^*_\n]+)[*_](?=[\s.,!?;:]|$)/g,'$1$2')
+     .replace(/[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}\u{200D}\u{2B50}\u{2705}]/gu,'')
+     .replace(/([^.!?:;,\s])\s*\r?\n+\s*/g,'$1. ').replace(/\r?\n+/g,' ');
+  // 2) adresy e-mail, strony, pliki
+  const dom=d=>d.split('.').map(x=>({com:'kom',pl:'pe el',eu:'e u',org:'org',net:'net',io:'i o',de:'de e',uk:'u ka'}[x.toLowerCase()]||x)).join(' kropka ');
+  s=s.replace(/([\w.+-]+)@([\w-]+(?:\.[\w-]+)+)/g,(m,u,d)=>u.replace(/[._-]/g,c=>({'.':' kropka ','_':' podkreślnik ','-':' myślnik '}[c]))+' małpa '+dom(d))
+     .replace(/https?:\/\/(?:www\.)?([\w-]+(?:\.[\w-]+)+)(?:\/[^\s,;)]*)?/gi,(m,d)=>dom(d))
+     .replace(/(?<![\w@])www\.([\w-]+(?:\.[\w-]+)+)(?:\/[^\s,;)]*)?/gi,(m,d)=>dom(d))
+     .replace(/([\wąćęłńóśźżĄĆĘŁŃÓŚŹŻ-]+)\.(pdf|docx?|xlsx?|pptx?|jpe?g|png|zip|csv|txt|md|mp4|mp3|wav|html?)(?![\w])/gi,(m,f,e)=>f+' kropka '+({pdf:'pe de ef',doc:'dok',docx:'doks',xls:'iks el es',xlsx:'iks el es iks',ppt:'pe pe te',pptx:'pe pe te iks',jpg:'jot peg',jpeg:'jot peg',png:'pe en gie',zip:'zip',csv:'ce es fał',txt:'te iks te',md:'em de',mp4:'em pe cztery',mp3:'em pe trzy',wav:'ław',html:'ha te em el',htm:'ha te em el'}[e.toLowerCase()]));
+  // 3) skróty
+  for(const [re,w] of SKROTY) s=s.replace(re,w);
+  // 4) wymiary i ułamki zwykłe: 120x60x50 → 120 na 60 na 50; 2026/11/15 → łamane przez
+  s=s.replace(/(\d)\s*[x×]\s*(?=\d)/g,'$1 na ').replace(/(\d)\s*\/\s*(?=\d)/g,'$1 łamane przez ');
+  // 5) telefony
+  s=s.replace(/(\+\s?\d{2})[\s-]?(\d{3})[\s-]?(\d{3})[\s-]?(\d{3})(?![\d]|[,.]\d)/g,(m,p,a,b,c)=>` plus ${numPL(+p.replace(/\D/g,''))}, ${grupaTel(a)}, ${grupaTel(b)}, ${grupaTel(c)}`)
+     .replace(/(\+\s?\d{2})[\s-]?\(?(\d{2})\)?[\s-]?(\d{3})[\s-]?(\d{2})[\s-]?(\d{2})(?![\d]|[,.]\d)/g,(m,p,a,b,c,d)=>` plus ${numPL(+p.replace(/\D/g,''))}, ${[a,b,c,d].map(grupaTel).join(', ')}`)
+     .replace(/(?<![\d,.])\(?(\d{2})\)?[\s-](\d{3})[\s-](\d{2})[\s-](\d{2})(?![\d]|[,.]\d)/g,(m,a,b,c,d)=>[a,b,c,d].map(grupaTel).join(', '))
+     .replace(/(?<![\d,.])(\d{3})-(\d{3})-(\d{3})(?![\d]|[,.]\d)/g,(m,a,b,c)=>[a,b,c].map(grupaTel).join(', '))
+     .replace(/(?<![\d,.])(\d{3}) (\d{3}) (\d{3})(?![\d]|[,.]\d|\s*(?:zł|PLN|tys|mln|osób|sztuk|szt|kg|m|cm|%))/g,(m,a,b,c,off,str)=>KONTEKST_TEL.test(pre(str,off))||/^[4-8]/.test(a)?[a,b,c].map(grupaTel).join(', '):m)
+     .replace(/(?<![\d,.])(\d{9})(?![\d]|[,.]\d)/g,(m,x,off,str)=>KONTEKST_TEL.test(pre(str,off))||/^[4-8]/.test(x)?[x.slice(0,3),x.slice(3,6),x.slice(6)].map(grupaTel).join(', '):m);
+  // 6) separatory tysięcy (1 250 000, 1 250,50)
+  s=s.replace(/(?<![\d,.])(\d{1,3})((?:[   ]\d{3})+)(?![\d])/g,(m,a,b)=>a+b.replace(/[   ]/g,''));
+  // 7) daty i lata
+  const przyp=(p)=>/(?:^|\s)(jest|to|był|była|będzie|wypada|przypada)\s*$/i.test(p)?'m':'g';
+  const data=(D,M,Y,p,rokSlowo)=>ordPL(D,przyp(p))+' '+MIES[M-1]+(Y?' '+ordPL(Y,'g')+' roku':'');
+  s=s.replace(/(?<!\d)(\d{4})-(\d{2})-(\d{2})(?!\d)/g,(m,y,mo,d,off,str)=>{ const M=+mo,D=+d; if(M<1||M>12||D<1||D>31) return m; return data(D,M,+y,pre(str,off)); });
+  s=s.replace(/(?<![\d,.])(\d{1,2})\.(\d{1,2})\.(\d{4}|\d{2})(?:\s*(?:r\.|roku)(?=[\s,.;:!?)]|$))?(?![\d])/g,(m,d,mo,y,off,str)=>{
+    const D=+d, M=+mo; if(D<1||D>31||M<1||M>12) return m; return data(D,M,y.length===2?2000+(+y):+y,pre(str,off)); });
+  s=s.replace(/(?<![\d,.])(\d{1,2})\.(\d{1,2})(?=[\s,;:!?)]|\.(?:\s|$)|$)/g,(m,d,mo,off,str)=>{
+    const D=+d, M=+mo; if(D<1||D>31||M<1||M>12) return m; return data(D,M,0,pre(str,off)); });
+  s=s.replace(new RegExp(`${W0}(\\d{1,2})\\s+(stycznia|lutego|marca|kwietnia|maja|czerwca|lipca|sierpnia|września|października|listopada|grudnia)(?:\\s+(\\d{4})(?:\\s*(?:r\\.|roku)${W1})?)?`,'gi'),(m,d,mi,y,off,str)=>{
+    const D=+d; if(D<1||D>31) return m; return ordPL(D,przyp(pre(str,off)))+' '+mi.toLowerCase()+(y?' '+ordPL(+y,'g')+' roku':''); });
+  // lata: „w 2025 r.” → w … dwudziestym piątym roku; „od 2025 r.” → od … dwudziestego piątego roku; „rok 2026” → rok … dwudziesty szósty
+  s=s.replace(new RegExp(`${W0}(w|we|po|z|ze|od|do|sprzed|przed|około)\\s+((?:19|20)\\d\\d)(?:\\s*(r\\.|roku|rokiem))?${W1}`,'gi'),(m,p,y,r)=>{
+    const c=/^(w|we|po)$/i.test(p)?'l':/^przed$/i.test(p)?'l':'g';
+    if(!r&&!/^(w|we)$/i.test(p)) return m;   // „od 2025” bez „roku” — może być kwota
+    return p+' '+ordPL(+y,c)+' '+(/^przed$/i.test(p)?'rokiem':(c==='l'?'roku':'roku')); });
+  s=s.replace(new RegExp(`${W0}(rok|roku|rocznik|rocznika)\\s+((?:19|20)\\d\\d)${W1}`,'gi'),(m,r,y)=>r+' '+ordPL(+y,/^roku$|^rocznika$/i.test(r)?'g':'m'));
+  s=s.replace(/(?<![\d,.])((?:19|20)\d\d)\s*r\.(?=[\s,;:!?)]|$)/g,(m,y)=>ordPL(+y,'m')+' rok');
+  // 8) godziny
+  const godz=(h,mi,p)=>{ const H=+h, M=+mi; if(H>24||M>59) return null;
+    const c=PRZ_NARZ.test(p)?'fi':(PRZ_GEN.test(p)||PRZ_MIEJSC.test(p))?'fg':'f';
+    const hw=H===0?'zero':ordPL(H,c);
+    return hw+(M?' '+(M<10?'zero '+N_J[M]:numPL(M)):''); };
+  s=s.replace(/(?<![\d,.])(\d{1,2}):(\d{2})(?:\s*[-–—]\s*(\d{1,2}):(\d{2}))?(?![\d])/g,(m,h,mi,h2,mi2,off,str)=>{
+    let p=pre(str,off); if(/między\s+\S+(?:\s+\S+)?\s+a\s*$/i.test(p)) p=' między ';
+    const a=godz(h,mi,p); if(!a) return m; if(h2==null) return a;
+    const b=godz(h2,mi2,' do '); if(!b) return a; return PRZ_GEN.test(p)||/od\s*$/i.test(p)?a+' do '+b:'od '+godz(h,mi,' od ')+' do '+b; });
+  s=s.replace(new RegExp(`${W0}(godzina|godzinie|godziny|godz\\.|o|od|do)\\s+(\\d{1,2})\\.(\\d{2})(?![\\d])`,'gi'),(m,p,h,mi)=>{ const a=godz(h,mi,' '+p.replace('godz.','o')+' '); return a?p.replace(/godz\./i,'o')+' '+a:m; });
+  s=s.replace(new RegExp(`${W0}(w\\s+godzinach|w\\s+godz\\.?|godzinach|godz\\.?|godziny)\\s+(\\d{1,2})\\s*[-–—]\\s*(\\d{1,2})(?![\\d])`,'gi'),(m,p,a,b)=>+a<=24&&+b<=24?(/^w/i.test(p)?'w godzinach ':'')+'od '+ordPL(+a,'fg')+' do '+ordPL(+b,'fg'):m);
+  s=s.replace(new RegExp(`${W0}(o|około|przed|po|od|do)\\s+(?:godz(?:inie|\\.)\\s*|godziny\\s+)(\\d{1,2})(?![\\d.,:])`,'gi'),(m,p,h)=>+h<=24?p+' '+ordPL(+h,/^przed$/i.test(p)?'fi':'fg'):m);
+  s=s.replace(new RegExp(`${W0}godz\\.\\s*(\\d{1,2})(?![\\d.,:])`,'gi'),(m,h)=>+h<=24?'godzina '+ordPL(+h,'f'):m);
+  s=s.replace(new RegExp(`${W0}(o)\\s+(\\d{1,2})(?=\\s*(?:$|[.;!?]|,(?!\\d)|\\s+(?:rano|wieczorem|po południu|w nocy|jutro|dzisiaj|dziś)))`,'gi'),(m,p,h)=>+h<=24?p+' '+ordPL(+h,'fg'):m);
+  // 9) kwoty i jednostki
+  s=s.replace(/(\$|€)\s?(\d+(?:[.,]\d+)?)/g,(m,u,n)=>n+' '+u);
+  const UNIT=`(zł|PLN|gr|€|EUR|\\$|USD|mm|cm2|cm|m2|m²|m3|m³|km\\/h|km|kg|kWh|kW|ml|szt\\.?|godz\\.?|min\\.?|mies\\.?|tys\\.?|mln|mld|°C|°|MB|GB|kB|%|h|m|g|l|t|s)`;
+  s=s.replace(new RegExp(`(?<![\\d,.])(\\d+)(?:,(\\d+))?\\s?${UNIT}(?![${L_}\\d²³])(?:\\s+(tys\\.?|mln|mld)(?![${L_}]))?(?:\\s*(zł|PLN|€|EUR)(?![${L_}]))?`,'g'),(m,a,fr,u,mult,cur,off,str)=>{
+    let key=u.toLowerCase(); if(/^(szt|godz|min|mies|tys)$/.test(key)) key+='.';
+    const f=JEDN[key]; if(!f) return m;
+    const p=pre(str,off), gen=PRZ_GEN.test(p), n=+a;
+    const zen=JEDN_Z.has(f[0]);
+    const liczba=(x,fem)=>{ const t=gen?numPL(x,true):numPL(x); return fem&&!gen?numZ(x,t):(fem&&gen&&x===1?'jednej':t); };
+    const forma=(x,F)=>gen?(x===1?F[3]:unitGenPl(F)):formaPo(x,F);
+    // 12,50 zł → dwanaście złotych pięćdziesiąt groszy
+    if((key==='zł'||key==='pln')&&fr&&fr.length===2&&!mult){ const zl=JEDN['zł'], gr=JEDN.gr, g=+fr;
+      return liczba(n)+' '+forma(n,zl)+(g?' '+liczba(g)+' '+forma(g,gr):''); }
+    const curF=cur?JEDN[cur.toLowerCase()]||JEDN['zł']:null;
+    if(/^(tys\.|mln|mld)$/.test(key)){   // 15 tys. zł → piętnaście tysięcy złotych
+      const head=fr?ulamek(a,fr,gen)+' '+f[3]:liczba(n)+' '+forma(n,f);
+      return head+(curF?' '+(gen?unitGenPl(curF):curF[2]):''); }
+    if(mult){ const mf=JEDN[mult.toLowerCase().replace(/\.?$/,'.')]||JEDN[mult.toLowerCase()];
+      const head=fr?ulamek(a,fr,gen)+' '+mf[3]:liczba(n)+' '+forma(n,mf);
+      return head+' '+(gen?unitGenPl(f):f[2])+(curF?' '+(gen?unitGenPl(curF):curF[2]):''); }
+    if(fr) return ulamek(a,fr,gen)+' '+f[3];
+    return liczba(n,zen)+' '+forma(n,f); });
+  s=s.replace(new RegExp(`${W0}(zł|PLN)${W1}`,'g'),'złotych');
+  // 10) pozostałe ułamki i liczby (z odmianą po przyimku i rodzajem żeńskim rzeczownika obok)
+  s=s.replace(/(?<![\d])(\d+),(\d+)(?![\d])/g,(m,a,b,off,str)=>ulamek(a,b,PRZ_GEN.test(pre(str,off))));
+  s=s.replace(/(?<![\d])(\d+)\.(\d+)(?![\d])/g,(m,a,b)=>numPL(+a)+' kropka '+numPL(+b));
+  s=s.replace(new RegExp(`(?<![\\d])(\\d+)(?:\\s*[-–—]\\s*(\\d+))?(?![\\d])(\\s+([${L_}]+))?(?=(?:\\s+([${L_}]+))?)`,'g'),(m,a,b,sp,word,word2,off,str)=>{
+    const p=pre(str,off), nomer=/(numer|nr|punkt|strona|stronie|pozycja|pozycji|pokój|lokal|rozdział|paragraf|art\.|artykuł)\s*$/i.test(p);
+    const gen=!nomer&&PRZ_GEN.test(p), fem=!nomer&&(zenska(word)||(/(?:e|ie|ych|ich)$/i.test(word||'')&&zenska(word2)));
+    const L=x=>{ const t=numPL(+x,gen);
+      if(+x===1&&!gen&&word){ if(/(?:mię|zwierzę|cielę|źrebię)$/.test(word)) return 'jedno'; if(/ę$/.test(word)&&!/się$/.test(word)) return 'jedną'; if(fem) return 'jedna'; if(/(?:ie|o|um)$/.test(word)) return 'jedno'; }
+      return fem&&!gen?numZ(+x,t):(fem&&gen&&+x===1?'jednej':t); };
+    if(b!=null&&+b>+a) return (gen?L(a):(/od\s*$/i.test(p)?L(a):L(a)))+' do '+(fem&&+b===1?'jednej':numPL(+b,true))+(sp||'');
+    if(b!=null) return L(a)+', '+L(b)+(sp||'');
+    return L(a)+(sp||''); });
+  // 11) skrótowce i słowa obce
+  s=s.replace(new RegExp(`[${L_}][${L_}\\d'’.-]*[${L_}\\d]|[${L_}]`,'g'),w=>{
+    const tail=/[.-]+$/.exec(w); const core=tail?w.slice(0,-tail[0].length):w, low=core.toLowerCase().replace(/’/g,'\''), tl=tail?tail[0].replace(/-+/g,' '):'';
+    if(OBCE[low]!=null){ const r=OBCE[low]; return (/^[A-ZĄĆĘŁŃÓŚŹŻ][a-ząćęłńóśźż]/.test(core)?r[0].toUpperCase()+r.slice(1):r)+tl; }
+    if(SKROTOWCE_WYM[core]) return SKROTOWCE_WYM[core]+tl;
+    if(/^[A-ZĄĆĘŁŃÓŚŹŻ]{2,5}$/.test(core)&&!SLOWA_SKROTOWCE.has(core)){ const vow=/[AĄEĘIOÓUY]/.test(core); if(!vow||core.length<=3) return literuj(core)+tl; }
+    if(/^[A-ZĄĆĘŁŃÓŚŹŻ]{2,}$/.test(core)) return core.toLowerCase()+tl;
+    if(/^[A-ZĄĆĘŁŃÓŚŹŻ]{2,5}-[a-ząćęłńóśźż]+$/.test(core)){ const [A,B]=core.split('-'); return (SKROTOWCE_WYM[A]||(SLOWA_SKROTOWCE.has(A)?A.toLowerCase():literuj(A)))+B+tl; }   // PDF-a → pe de efa
+    return w; });
+  // 12) znaki
+  s=s.replace(/\s*[–—]\s*/g,', ').replace(/([^\s\d])-(?=[^\s\d])/g,'$1 ').replace(/\s+-\s+/g,', ').replace(/&/g,' i ').replace(/\+/g,' plus ')
+     .replace(/=/g,' równa się ').replace(/±/g,' plus minus ').replace(/~/g,' około ').replace(/[→⇒]/g,', ').replace(/#/g,' ').replace(/@/g,' małpa ')
+     .replace(/%/g,' procent').replace(/°/g,' stopni').replace(/[()[\]{}]/g,', ').replace(/["„”“«»]/g,'').replace(/[*_\\|<>^]/g,' ').replace(/\//g,' ')
+     .replace(/\s+([,.!?;:])/g,'$1').replace(/([,;:])(?:\s*,)+/g,'$1').replace(/^[\s,.]+/,'').replace(/,\s*([.!?])/g,'$1').replace(/\.\s*\./g,'.').replace(/\s+/g,' ').trim();
+  return s;
 }
-function sentences(t){ return (t.match(/[^.!?…]+[.!?…]*["”»]?\s*/g)||[t]).map(s=>s.trim()).filter(Boolean); }
+/* NORMALIZACJA-END */
+/* Granice zdań: kropka po skrócie („np.”, „ul.”, „tel.”), w dacie („15.11.2026”), po inicjale („J. Kowalski”)
+   ani po liczbie przed małą literą („15. listopada”) nie kończy zdania. Wspólne dla całej kwestii i dla czatu
+   dopływającego kawałkami (wtedy granica na samym końcu dotychczasowego tekstu czeka na ciąg dalszy). */
+const SKR_NIE=new Set(['np','ul','al','tel','nr','godz','ok','dr','prof','mgr','inż','pl','os','św','tzw','tj','tzn','wg','ws','dot','zob','pkt','str','poz','zał','sp','ds','im','gen','ks','red','wyd','pn','wt','śr','czw','pt','sob','ndz','nd','dn','ob','tow','kom','proc','wsp','jw','ul','pw','tys','mln','mld','gr','szt','godz','mies','m.in','b.d','sp. z o.o','o.o','in','s.c','p']);
+const SKR_MOZE=new Set(['itd','itp','r','w','zł','min','cm','mm','km','kg','l','m','h','s']);
+function granicaZdania(t,i,koniec){
+  let j=i; while(j<t.length&&/[.!?…]/.test(t[j])) j++; const punct=t.slice(i,j);
+  while(j<t.length&&/["”»)\]]/.test(t[j])) j++;
+  if(j>=t.length) return koniec?j:0;                 // koniec tekstu: w strumieniu czekamy na ciąg dalszy
+  if(!/\s/.test(t[j])) return -1;                    // „15.11”, „egzo.pl”, „3.5” — nie granica
+  let k=j; while(k<t.length&&/\s/.test(t[k])) k++;
+  if(/[!?…]/.test(punct)||punct.length>=3) return k;
+  if(/\n/.test(t.slice(j,k))) return k;
+  if(k>=t.length) return koniec?k:0;
+  const next=t[k], duza=/[A-ZĄĆĘŁŃÓŚŹŻ"„«]/.test(next);
+  const przed=t.slice(Math.max(0,i-12),i), slowo=(/(?:^|[\s(])((?:[a-ząćęłńóśźż]\.)+[a-ząćęłńóśźż]+|[A-Za-zĄĆĘŁŃÓŚŹŻąćęłńóśźż]+|\d+)$/.exec(przed)||[])[1]||'';
+  const low=slowo.toLowerCase();
+  if(SKR_NIE.has(low)) return -1;
+  if(/^[A-ZĄĆĘŁŃÓŚŹŻ]$/.test(slowo)&&duza) return -1;              // inicjał: J. Kowalski
+  if(/^\d+$/.test(slowo)||SKR_MOZE.has(low)) return duza?k:-1;      // „w 2026. Potem” — tak; „15. listopada” — nie
+  return k;
+}
+function sentences(t,koniec=true){
+  const out=[]; let start=0;
+  for(let i=0;i<t.length;i++){ if(!/[.!?…]/.test(t[i])) continue;
+    const e=granicaZdania(t,i,koniec);
+    if(e>0){ const s=t.slice(start,e).trim(); if(s) out.push(s); start=e; i=e-1; }
+    else { while(i+1<t.length&&/[.!?…]/.test(t[i+1])) i++; } }
+  const rest=t.slice(start).trim(); if(rest) out.push(rest);
+  return out;
+}
+// strumień: zdania zakończone pewną granicą od pozycji `od` → [zdania, nowa pozycja]
+function zdaniaGotowe(t,od){
+  const out=[]; let start=od;
+  for(let i=od;i<t.length;i++){ if(!/[.!?…]/.test(t[i])) continue;
+    const e=granicaZdania(t,i,false);
+    if(e===0) break;
+    if(e>0){ const s=t.slice(start,e).trim(); if(s) out.push(s); start=e; i=e-1; }
+    else { while(i+1<t.length&&/[.!?…]/.test(t[i+1])) i++; } }
+  return [out,start];
+}
 function pauseAfter(t){ return /[?!]["”»]?$/.test(t)?.32:/[.…]["”»]?$/.test(t)?.26:/[,;:]$/.test(t)?.12:.18; }
 function trimSilence(pcm,sr){
   let peak=0; for(let i=0;i<pcm.length;i++) peak=Math.max(peak,Math.abs(pcm[i]));
@@ -285,7 +564,7 @@ function utworz(opt){
     eng.stats.push({gap:+(start-Math.max(eng.endAt,now)).toFixed(3),late:eng.endAt>0&&cont===false&&eng.stats.length>0&&eng.last?+(now-eng.endAt).toFixed(3):0,synthMs:Math.round(m.ms||0),sec:+buf.duration.toFixed(2),lib:!m.ms});
     const krocej=intonacja(s,start,buf.duration,pytanieTakNie(m.text),m,tr.offset+(m.pre||0));
     s.start(start); eng.endAt=start+buf.duration-krocej; eng.last=m.text||''; eng.live++;
-    lip.segs.push({t0:start,dur:buf.duration,tl:lipTimeline(m,tr.offset+(m.pre||0),buf.duration,tr.pcm,start)});
+    lip.segs.push({t0:start,dur:buf.duration,tl:lipTimeline(m,tr.offset+(m.pre||0),buf.duration,tr.pcm,start),glowa:ruchGlowy(tr.pcm,sr,buf.duration,pytanieTakNie(m.text))});
     if(lip.segs.length>16) lip.segs.shift();
     s.onended=()=>{ eng.live--; const i=eng.sources.indexOf(s); if(i>=0) eng.sources.splice(i,1); speechDone(); };
     eng.sources.push(s);
@@ -334,8 +613,8 @@ function utworz(opt){
     if(neuralOn()){ eng.open=true; o.czekajNaSpoczynek(); }
     return {
       dodaj(full){ if(tok!==sayTok) return; napis(full); if(!neuralOn()) return;
-        const re=/[^.!?…]+[.!?…]+["”»]?(?=\s|$)/g; re.lastIndex=done; let m;
-        while((m=re.exec(full))&&m.index>=done&&/\s/.test(full[re.lastIndex]||'')){ enqueueSpeech(spokenPL(m[0].trim())); done=re.lastIndex; } },
+        const [zd,nowy]=zdaniaGotowe(full,done); done=nowy;
+        for(const z of zd) for(const s of sentences(spokenPL(z))) enqueueSpeech(s); },
       async zakoncz(full){ if(tok!==sayTok) return; napis(full);
         if(neuralOn()){ const rest=full.slice(done).trim(); if(rest) sentences(spokenPL(rest)).forEach(enqueueSpeech); eng.open=false; flushSpeech(); await waitSpeech(); }
         else await say(full);
@@ -349,7 +628,13 @@ function utworz(opt){
      pozy byłyby krzywe (do 10°); przy bliskiej pozie błąd kąta < 1°. */
   const POSE_FREE=6, POSE_W=.03, POSE_MAX=16, K_CAND=64;
   // żuchwa: broda z wideo opuszcza się razem z otwieraniem ust (różnica otwarcia nakładka − wideo)
-  const JAW_PX=5, JAW_Y0=227, JAW_CHIN=291, JAW_K=.35;
+  const JAW_PX=5, JAW_Y0=227, JAW_CHIN=268, JAW_K=.35;
+  // głowa i brwi przy mówieniu (układ kadru bazowego): kiwnięcia z rytmu głośności, lekkie kołysanie, brwi przy pytaniach
+  const HEAD={dyMax:2.6, rot:.0075, brow:1.6, pivot:[585,300], k:.3, gain:3.4};
+  // płótna pomocnicze nakładki: rysowane procesorem (bez synchronizacji z kartą graficzną przy każdej warstwie)
+  const PL_CPU=o.plotnoCPU!==undefined?!!o.plotnoCPU:!(typeof location!=='undefined'&&/plotno=gpu/.test(location.search));
+  const ctx2d=cv=>cv.getContext('2d',{willReadFrequently:PL_CPU});
+  const oddaj=()=>new Promise(r=>{ if(globalThis.scheduler&&scheduler.yield) scheduler.yield().then(r); else { const ch=new MessageChannel(); ch.port1.onmessage=()=>r(); ch.port2.postMessage(0); } });
   const lip={img:null,lib:null,tory:{},segs:[],alpha:0,cur:-1,last:null,canvas:o.canvas,ctx:o.canvas?o.canvas.getContext('2d'):null,ready:null,fixes:0,frame:-1,diag:{n:0,off:0,maxOff:0}};
   lip.ready=(async()=>{ try{
     const [libj,track]=await Promise.all([fetch(o.bazaUst+'usta-klatki.json?v='+o.wersjaDanych).then(r=>r.json()),fetch(o.bazaUst+'usta-tor.json?v='+o.wersjaDanych).then(r=>r.json())]);
@@ -369,24 +654,53 @@ function utworz(opt){
       for(let j=0;j<n;j++) if(vo[j]<0){ let a=j,b=j; while(a>0&&vo[a]<0) a--; while(b<n-1&&vo[b]<0) b++; vo[j]=vo[a]>=0?vo[a]:Math.max(0,vo[b]); }
       lip.vopen=vo; }
     // maska warstwy żuchwy (w układzie kadru bazowego): od linii ust w dół do szyi, miękkie brzegi
-    { const X=500,Y=JAW_Y0-6,W=164,H=118, m=document.createElement('canvas'); m.width=W; m.height=H; const x=m.getContext('2d'), id=x.createImageData(W,H);
+    { const X=500,Y=JAW_Y0-6,W=164,H=118, m=document.createElement('canvas'); m.width=W; m.height=H; const x=ctx2d(m), id=x.createImageData(W,H);
       for(let yy=0;yy<H;yy++) for(let xx=0;xx<W;xx++){ const rx=X+xx, ry=Y+yy;
         const top=Math.min(1,Math.max(0,(ry-(JAW_Y0-2))/10)), bot=Math.min(1,Math.max(0,(JAW_CHIN+30-ry)/22)), side=Math.min(1,Math.max(0,(74-Math.abs(rx-582))/16));
         id.data[(yy*W+xx)*4+3]=Math.round(255*top*bot*side); }
-      x.putImageData(id,0,0); lip.jawMask={c:m,X,Y,W,H}; lip.jawCanvas=document.createElement('canvas'); lip.jawCanvas.width=240; lip.jawCanvas.height=200; lip.jaw=0; }
+      x.putImageData(id,0,0); lip.jawMask={c:m,X,Y,W,H}; lip.jawCanvas=document.createElement('canvas'); lip.jawCanvas.width=240; lip.jawCanvas.height=200; ctx2d(lip.jawCanvas); lip.jaw=0; }
+    const maska=(X,Y,W,H,fn)=>{ const m=document.createElement('canvas'); m.width=W; m.height=H; const x=ctx2d(m), id=x.createImageData(W,H);
+      for(let yy=0;yy<H;yy++) for(let xx=0;xx<W;xx++) id.data[(yy*W+xx)*4+3]=Math.round(255*Math.max(0,Math.min(1,fn(X+xx,Y+yy))));
+      x.putImageData(id,0,0); return {c:m,X,Y,W,H}; };
+    const cl=v=>Math.max(0,Math.min(1,v));
+    // głowa: twarz z włosami, miękkie brzegi (tło przy włosach przesuwa się o ułamek piksela — niewidoczne), wygaszenie na szyi
+    lip.headMask=maska(462,26,256,300,(x,y)=>{ const e=((x-588)/118)**2+((y-172)/142)**2; return cl((1-e)/.3)*cl((305-y)/35); });
+    // brwi: pas nad linią oczu (oczy w układzie twarzy: (567,155) i (640,172)), bez powiek
+    const oko=x=>155+(x-567)*.233;
+    lip.browMask=maska(512,84,184,96,(x,y)=>{ const L=oko(x); return cl((y-(L-54))/10)*cl(((L-8)-y)/8)*cl((80-Math.abs(x-602))/18); });
+    lip.headCanvas=document.createElement('canvas'); lip.headCanvas.width=320; lip.headCanvas.height=360;
+    lip.browCanvas=document.createElement('canvas'); lip.browCanvas.width=230; lip.browCanvas.height=140; ctx2d(lip.browCanvas);
+    lip.hd=0; lip.hr=0; lip.hb=0;
     const PL=track.poza&&track.poza.idle, PT=libj.poza;
     if(PL&&PT&&PT.length===nR){
       // odległość pozy: każda klatka ust × każda klatka pętli; dla każdej klatki pętli K najbliższych klatek ust
+      // liczone porcjami (≤ 12 ms) z oddaniem wątku między porcjami — strona nie zamiera przy wczytaniu;
+      // K najbliższych przez wstawianie do krótkiej posortowanej listy zamiast sortowania całej biblioteki (ta sama kolejność co sort stabilny)
       const nL=PL.length, nT=nE, Dm=new Float32Array(nT*nL);
       const poseOf=e=>e<nR?(lip.real[e]?PT[e]:null):PL[V[e-nR][1]];   // wirtualna ma pozę swojej kotwicy; kopie tylko przez wirtualne
-      for(let t=0;t<nT;t++){ const P=poseOf(t); for(let j=0;j<nL;j++){ if(!P){ Dm[t*nL+j]=1e6; continue; } let s=0; for(let d=0;d<P.length;d++){ const x=P[d]-PL[j][d]; s+=x*x; } Dm[t*nL+j]=Math.sqrt(s); } }
-      const k=Math.min(K_CAND,nT), cand=new Int16Array(nL*k), clen=new Uint8Array(nL), ids=[...Array(nT).keys()];
-      for(let j=0;j<nL;j++){ ids.sort((a,b)=>Dm[a*nL+j]-Dm[b*nL+j]); let n=0;
-        for(let q=0;q<k;q++){ if(q>=6&&Dm[ids[q]*nL+j]>POSE_MAX) break; cand[j*k+q]=ids[q]; n++; } clen[j]=n; }
+      const pz=Array.from({length:nT},(_,t)=>poseOf(t));
+      const k=Math.min(K_CAND,nT), cand=new Int16Array(nL*k), clen=new Uint8Array(nL), bD=new Float32Array(k), bI=new Int16Array(k);
+      let tq=performance.now();
+      for(let j=0;j<nL;j++){ const Q=PL[j]; let n=0;
+        for(let t=0;t<nT;t++){ const P=pz[t]; let dd=1e6;
+          if(P){ let s=0; for(let d=0;d<P.length;d++){ const x=P[d]-Q[d]; s+=x*x; } dd=Math.sqrt(s); }
+          Dm[t*nL+j]=dd;
+          if(n<k||dd<bD[k-1]){ let p=n<k?n++:k-1; while(p>0&&bD[p-1]>dd){ bD[p]=bD[p-1]; bI[p]=bI[p-1]; p--; } bD[p]=dd; bI[p]=t; } }
+        let c=0; for(let q=0;q<n;q++){ if(q>=6&&bD[q]>POSE_MAX) break; cand[j*k+q]=bI[q]; c++; } clen[j]=c;
+        if(performance.now()-tq>12){ await oddaj(); tq=performance.now(); } }
       lip.D=Dm; lip.nL=nL; lip.K=k; lip.cand=cand; lip.clen=clen;
     }
     lip.lib=libj; lip.img=img;
+    rozgrzej();
   }catch(e){ lip.img=null; } })();
+  // rozgrzanie kompilatora JS: pierwsze wywołania doboru ust są kilkanaście razy wolniejsze — robimy je zawczasu, w tle
+  async function rozgrzej(){
+    try{ const chars=Array.from('_d_z_i_ę_k_u_j_ę_,_ _m_a_m_ _t_o_ _o_d_ _r_a_z_u_.'), dur=Float32Array.from(chars,(_,i)=>3+(i*7)%6), sr=22050, hop=256;
+      const total=dur.reduce((a,b)=>a+b,0)*hop/sr, pcm=new Float32Array(Math.ceil(total*sr)); for(let i=0;i<pcm.length;i++) pcm[i]=Math.sin(i*.05)*(.3+.3*Math.sin(i*.0007));
+      const m={type:'rozgrzewka',id:0,pcm,dur,chars,hop,ms:0,sampleRate:sr};   // ten sam kształt i typy co wynik syntezy (wspólne dane kompilatora)
+      for(let r=0;r<5;r++){ await oddaj(); const tg=lipTargets(m,0,total,pcm), js=lip.cand?Int16Array.from({length:tg.length},(_,i)=>(i*3)%lip.nL):null; lipSelect(tg,js); }
+    }catch(e){}
+  }
   const poseCost=(f,j)=>{ const d=lip.D[f*lip.nL+j]; return d>POSE_FREE?(d-POSE_FREE)*POSE_W:0; };
   // dokładny czas WYŚWIETLANEJ klatki wideo (requestVideoFrameCallback), inaczej currentTime
   function videoTime(v){
@@ -403,7 +717,50 @@ function utworz(opt){
     return js;
   }
   // wybór klatek (Viterbi): koszt = różnica otwarcia + odejście od pozy na ekranie + skok między nienastępującymi klatkami
+  /* Dobór klatek ust (Viterbi). Koszt przejścia g→f: 0 dla kolejnej klatki nagrania, „zostań” dla tej samej,
+     inaczej skok + różnica·|otwarcie(g) − otwarcie(f)|. Minimum po poprzednich klatkach liczone transformatą odległości
+     (dwa przebiegi po klatkach posortowanych według otwarcia) — O(K) zamiast O(K²) na krok: ok. 10× szybciej. */
   function lipSelect(tg,js){
+    const S=CFG.skok, Z=CFG.zostan, A=CFG.roznica;
+    if(Z>S) return lipSelectRef(tg,js);
+    const T=tg.length, open=lip.open, nx=lip.next, nE=open.length, wt=tg.wt||new Float32Array(T).fill(1);
+    const pose=!!(lip.cand&&js), k=pose?lip.K:nE;
+    if(!pose&&!lip.allReal) lip.allReal=Int16Array.from({length:nE},(_,i)=>i).filter(e=>lip.real[e]);
+    const setAt=t=>pose?lip.cand.subarray(js[t]*k,js[t]*k+lip.clen[js[t]]):lip.allReal;
+    // kolejność według otwarcia dla każdego zbioru kandydatów (zbiory są stałe dla klatki pętli) — liczona raz
+    if(!lip.cordT||lip.cordT.length!==(pose?lip.nL:1)*k){ lip.cordT=new Int16Array((pose?lip.nL:1)*k); lip.cordOk=new Uint8Array(pose?lip.nL:1); }
+    const ordAt=t=>{ const j=pose?js[t]:0, set=setAt(t), b=j*k, ord=lip.cordT.subarray(b,b+set.length);
+      if(!lip.cordOk[j]){ const ix=Array.from({length:set.length},(_,q)=>q).sort((a,c)=>open[set[a]]-open[set[c]]||a-c); ord.set(ix); lip.cordOk[j]=1; } return ord; };
+    const iP=lip.iPrev&&lip.iPrev.length===nE?lip.iPrev:(lip.iPrev=new Int32Array(nE).fill(-1)), iN=lip.iNext&&lip.iNext.length===nE?lip.iNext:(lip.iNext=new Int32Array(nE).fill(-1));
+    const states=new Int16Array(T*k), back=new Int16Array(T*k), jv=new Float64Array(k), ja=new Int32Array(k);
+    let prev=setAt(0), cost=new Float64Array(k), nc=new Float64Array(k); states.set(prev,0);
+    for(let q=0;q<prev.length;q++){ const f=prev[q]; cost[q]=wt[0]*Math.abs(open[f]-tg[0])+(pose?poseCost(f,js[0]):(f===lip.closed?0:.05)); }
+    let ordPrev=ordAt(0);
+    for(let t=1;t<T;t++){
+      const cur=setAt(t), ordCur=ordAt(t), nP=prev.length, nC=cur.length; states.set(cur,t*k);
+      for(let r=0;r<nP;r++){ const g=prev[r]; if(iP[g]<0) iP[g]=r; const h2=nx[g]; if(h2>=0&&(iN[h2]<0||cost[r]<cost[iN[h2]])) iN[h2]=r; }
+      // przebieg rosnący: min(cost − A·o) po klatkach o otwarciu ≤ x; malejący: min(cost + A·o) po ≥ x
+      let p=0, m=Infinity, am=-1;
+      for(let u=0;u<nC;u++){ const q=ordCur[u], x=open[cur[q]];
+        while(p<nP){ const r=ordPrev[p], o2=open[prev[r]]; if(o2>x) break; const v=cost[r]-A*o2; if(v<m||(v===m&&r<am)){ m=v; am=r; } p++; }
+        jv[q]=am>=0?m+A*x:Infinity; ja[q]=am; }
+      p=nP-1; m=Infinity; am=-1;
+      for(let u=nC-1;u>=0;u--){ const q=ordCur[u], x=open[cur[q]];
+        while(p>=0){ const r=ordPrev[p], o2=open[prev[r]]; if(o2<x) break; const v=cost[r]+A*o2; if(v<m||(v===m&&r<am)){ m=v; am=r; } p--; }
+        if(am>=0){ const v=m-A*x; if(v<jv[q]||(v===jv[q]&&am<ja[q])){ jv[q]=v; ja[q]=am; } } }
+      const wtt=wt[t], tgt=tg[t], jt=pose?js[t]:0;
+      for(let q=0;q<nC;q++){ const f=cur[q]; let best=jv[q]+S, bi=ja[q];
+        let r=iP[f]; if(r>=0){ const v=cost[r]+Z; if(v<best||(v===best&&r<bi)){ best=v; bi=r; } }
+        r=iN[f]; if(r>=0){ const v=cost[r]; if(v<best||(v===best&&r<bi)){ best=v; bi=r; } }
+        nc[q]=best+wtt*Math.abs(open[f]-tgt)+(pose?poseCost(f,jt):0); back[t*k+q]=bi; }
+      for(let r=0;r<nP;r++){ const g=prev[r]; iP[g]=-1; if(nx[g]>=0) iN[nx[g]]=-1; }
+      const x=cost; cost=nc; nc=x; prev=cur; ordPrev=ordCur;
+    }
+    let q=0; for(let r=1;r<prev.length;r++) if(cost[r]<cost[q]) q=r;
+    const out=new Int16Array(T); for(let t=T-1;t>=0;t--){ out[t]=states[t*k+q]; q=back[t*k+q]; }
+    return out;
+  }
+  function lipSelectRef(tg,js){   // wersja wzorcowa O(T·K²) — do testu zgodności szybkiej wersji
     const T=tg.length, open=lip.open, nx=lip.next, wt=tg.wt||new Float32Array(T).fill(1);
     const step=(cur,prev,cost,nc,back,t,pose,k)=>{
       for(let q=0;q<cur.length;q++){ const f=cur[q]; let best=1e9,bi=0;
@@ -437,6 +794,11 @@ function utworz(opt){
     for(let q=0;q<lip.clen[j];q++){ const g=lip.cand[b+q], c=Math.abs(lip.open[g]-lip.open[f])+poseCost(g,j); if(c<bc){bc=c;best=g;} }
     lip.fixes++; return best;
   }
+  function glowaAt(t){
+    for(const s of lip.segs){ if(t>=s.t0&&t<s.t0+s.dur&&s.glowa){ const pos=(t-s.t0)*LIP_FPS, k=Math.min(s.glowa.dy.length-1,Math.floor(pos)), k2=Math.min(s.glowa.dy.length-1,k+1), f=pos-Math.floor(pos), g=s.glowa;
+      return {dy:g.dy[k]*(1-f)+g.dy[k2]*f, r:g.rot[k]*(1-f)+g.rot[k2]*f, b:g.br[k]*(1-f)+g.br[k2]*f}; } }
+    return null;
+  }
   function lipFrameAt(t){
     for(const s of lip.segs){ if(t>=s.t0&&t<s.t0+s.dur){ const pos=(t-s.t0)*LIP_FPS, k=Math.floor(pos), kk=Math.min(s.tl.length-1,k);
       return {a:s.tl[kk], b:s.tl[Math.min(s.tl.length-1,k+1)], f:pos-k, j:s.tl.js?s.tl.js[kk]:-1, cel:s.tl.tg?s.tl.tg[kk]:-1}; } }
@@ -449,32 +811,91 @@ function utworz(opt){
     if(m){ c.translate(x0,y0); c.transform(m[0],m[1],m[2],m[3],m[4],m[5]); c.drawImage(lip.img,sx,sy,tw,th,0,0,tw,th); }   // przeniesione usta: korekta do tej pozy
     else c.drawImage(lip.img,sx,sy,tw,th,x0,y0,tw,th);
   }
-  // broda z wideo rozciągnięta w dół od linii ust (y' = y + s·(y − linia ust)), w układzie twarzy
-  function drawJaw(c,v,T,dy){
-    const J=lip.jawMask, jc=lip.jawCanvas, x=jc.getContext('2d'), s=dy/(JAW_CHIN-JAW_Y0);
-    const [A,B,C,D,E,F]=T, det=A*D-B*C, iA=D/det, iB=-B/det, iC=-C/det, iD=A/det, iE=(C*F-D*E)/det, iF=(B*E-A*F)/det;
-    // M = T · S · T⁻¹ (S: rozciągnięcie w pionie względem linii ust)
-    const S=[1,0,0,1+s,0,-s*JAW_Y0];
-    const mul=(p,q)=>[p[0]*q[0]+p[2]*q[1],p[1]*q[0]+p[3]*q[1],p[0]*q[2]+p[2]*q[3],p[1]*q[2]+p[3]*q[3],p[0]*q[4]+p[2]*q[5]+p[4],p[1]*q[4]+p[3]*q[5]+p[5]];
-    const M=mul(mul([A,B,C,D,E,F],S),[iA,iB,iC,iD,iE,iF]);
-    // obszar na ekranie (ramka maski po przekształceniu)
-    let bx0=1e9,by0=1e9,bx1=-1e9,by1=-1e9;
-    for(const X of [J.X,J.X+J.W]) for(const Y of [J.Y,J.Y+J.H]){ const u=A*X+C*Y+E, q=B*X+D*Y+F; bx0=Math.min(bx0,u); by0=Math.min(by0,q); bx1=Math.max(bx1,u); by1=Math.max(by1,q); }
-    bx0=Math.floor(bx0)-2; by0=Math.floor(by0)-2; const bw=Math.min(jc.width,Math.ceil(bx1-bx0)+4), bh=Math.min(jc.height,Math.ceil(by1-by0)+4);
-    x.globalCompositeOperation='copy'; x.setTransform(M[0],M[1],M[2],M[3],M[4]-bx0,M[5]-by0);
-    const sx=Math.max(0,bx0-8), sy=Math.max(0,by0-12); x.drawImage(v,sx,sy,bw+16,bh+24,sx,sy,bw+16,bh+24);
-    x.globalCompositeOperation='destination-in'; x.setTransform(A,B,C,D,E-bx0,F-by0); x.drawImage(J.c,J.X,J.Y);
-    x.globalCompositeOperation='source-over'; x.setTransform(1,0,0,1,0,0);
-    c.setTransform(1,0,0,1,0,0); c.globalAlpha=1; c.drawImage(jc,0,0,bw,bh,bx0,by0,bw,bh);
-    lip.jawLast=[bx0,by0,bw,bh];
+  // macierze 2×3 w zapisie canvas [a,b,c,d,e,f]: (x,y) → (a·x + c·y + e, b·x + d·y + f)
+  const mul=(p,q)=>[p[0]*q[0]+p[2]*q[1],p[1]*q[0]+p[3]*q[1],p[0]*q[2]+p[2]*q[3],p[1]*q[2]+p[3]*q[3],p[0]*q[4]+p[2]*q[5]+p[4],p[1]*q[4]+p[3]*q[5]+p[5]];
+  const inv=T=>{ const [A,B,C,D,E,F]=T, det=A*D-B*C; return [D/det,-B/det,-C/det,A/det,(C*F-D*E)/det,(B*E-A*F)/det]; };
+  // warstwa z wideo: wycinek (maska w układzie twarzy) przekształcony X w układzie twarzy i położony z ruchem głowy:
+  // M = T' · X · T⁻¹  (T: kadr bazowy → klatka, T' = T · ruch głowy)
+  function drawLayer(c,v,T,Tp,X,Mk,cv,R){
+    const tq=performance.now(), pr=lip.prof||(lip.prof={});
+    try{ return drawLayer0(c,v,T,Tp,X,Mk,cv,R); } finally{ const k=Mk===lip.browMask?'brwi':'zuchwa'; pr[k]=(pr[k]||0)*.9+(performance.now()-tq)*.1; }
   }
+  function drawLayer0(c,v,T,Tp,X,Mk,cv,R){
+    const M=mul(mul(Tp,X),inv(T)), [A,B,C,D,E,F]=Tp, x=cv.getContext('2d');
+    let bx0=1e9,by0=1e9,bx1=-1e9,by1=-1e9;
+    for(const XX of [Mk.X,Mk.X+Mk.W]) for(const YY of [Mk.Y,Mk.Y+Mk.H]){ const u=A*XX+C*YY+E, q=B*XX+D*YY+F; bx0=Math.min(bx0,u); by0=Math.min(by0,q); bx1=Math.max(bx1,u); by1=Math.max(by1,q); }
+    bx0=Math.floor(bx0)-2; by0=Math.floor(by0)-2; const bw=Math.min(cv.width,Math.ceil(bx1-bx0)+4), bh=Math.min(cv.height,Math.ceil(by1-by0)+4);
+    x.globalCompositeOperation='copy'; x.setTransform(M[0],M[1],M[2],M[3],M[4]-bx0,M[5]-by0);
+    const sx=Math.max(v.x,bx0-12), sy=Math.max(v.y,by0-14), sw=Math.min(bw+24,v.x+v.cv.width-sx), sh=Math.min(bh+28,v.y+v.cv.height-sy);
+    if(sw>0&&sh>0) x.drawImage(v.cv,sx-v.x,sy-v.y,sw,sh,sx,sy,sw,sh);
+    x.globalCompositeOperation='destination-in'; x.setTransform(A,B,C,D,E-bx0,F-by0); x.drawImage(Mk.c,Mk.X,Mk.Y);
+    x.globalCompositeOperation='source-over'; x.setTransform(1,0,0,1,0,0);
+    c.setTransform(1,0,0,1,0,0); c.globalAlpha=1; c.drawImage(cv,0,0,bw,bh,bx0-R.x,by0-R.y,bw,bh);
+  }
+  // ruch głowy w układzie twarzy: obrót wokół szyi + przesunięcie w pionie
+  function headMatrix(dy,r){ const [Px,Py]=HEAD.pivot, co=Math.cos(r), si=Math.sin(r); return [co,si,-si,co,Px-(co*Px-si*Py),Py-(si*Px+co*Py)+dy]; }
+  // przebieg ruchu głowy dla wypowiedzi (25 kroków/s): kiwnięcia = szybka obwiednia głośności − wolna (akcenty),
+  // lekkie kołysanie, przy pytaniu tak/nie na końcu broda w górę i uniesione brwi
+  function ruchGlowy(pcm,sr,total,pyt){
+    const n=Math.max(1,Math.ceil(total*LIP_FPS)), hop=Math.round(sr/LIP_FPS), e=new Float32Array(n);
+    for(let i=0;i<n;i++){ let a=0; const s=i*hop, t=Math.min(pcm.length,s+hop); for(let k=s;k<t;k++) a+=pcm[k]*pcm[k]; e[i]=Math.sqrt(a/Math.max(1,t-s)); }
+    const srt=Array.from(e).sort((a,b)=>a-b), p95=srt[Math.floor(.95*(n-1))]||1; for(let i=0;i<n;i++) e[i]=Math.min(1.2,e[i]/p95);
+    const sm=(a,k)=>{ const o=new Float32Array(a.length); for(let i=0;i<a.length;i++){ let s=0,c=0; for(let j=Math.max(0,i-k);j<=Math.min(a.length-1,i+k);j++){ s+=a[j]; c++; } o[i]=s/c; } return o; };
+    const fast=sm(e,2), slow=sm(e,12), dy=new Float32Array(n), rot=new Float32Array(n), br=new Float32Array(n);
+    const emph=Array.from(fast).map((v,i)=>v-slow[i]), es=[...emph].sort((a,b)=>a-b), p92=es[Math.floor(.92*(n-1))]||.2;
+    const ph=Math.random()*6.28, fade=i=>Math.min(1,i/8,(n-1-i)/8);
+    for(let i=0;i<n;i++){
+      dy[i]=Math.max(-.3,Math.min(1,emph[i]*HEAD.gain))*HEAD.dyMax*fade(i);
+      rot[i]=HEAD.rot*Math.sin(2*Math.PI*(i/LIP_FPS)/3.3+ph)*fade(i);
+      br[i]=emph[i]>p92&&p92>.05?.45*HEAD.brow:0;
+    }
+    if(pyt){ const q=Math.min(n,Math.round(.6*LIP_FPS)); for(let k=0;k<q;k++){ const i=n-1-k, w=1-k/q; dy[i]-=.9*w; br[i]=Math.max(br[i],HEAD.brow*Math.min(1,w*1.6)); } }
+    return {dy:sm(dy,1),rot,br:sm(br,2)};
+  }
+  /* ----- płótno głowy: głowa, brwi, żuchwa i usta rysowane BEZ ruchu głowy na małym płótnie nad głową;
+     kiwnięcie i kołysanie robi przekształcenie CSS tego płótna (kompozytor/karta graficzna, tanio 60×/s).
+     Zawartość przerysowywana tylko przy zmianie (nowa klatka wideo, usta, żuchwa, brwi) — ok. 25×/s. ----- */
+  function hcInit(){
+    if(lip.hc||!lip.tory.idle||!lip.headMask) return lip.hc;
+    const M=lip.headMask, W=(o.canvas&&o.canvas.width)||1280, H=(o.canvas&&o.canvas.height)||720;
+    let x0=1e9,y0=1e9,x1=-1e9,y1=-1e9;
+    for(const tr of lip.tory.idle){ const [A,B,C,D,E,F]=tr[5];
+      for(const X of [M.X,M.X+M.W]) for(const Y of [M.Y,M.Y+M.H]){ const u=A*X+C*Y+E, q=B*X+D*Y+F; x0=Math.min(x0,u); y0=Math.min(y0,q); x1=Math.max(x1,u); y1=Math.max(y1,q); } }
+    const R={x:Math.max(0,Math.floor(x0)-16),y:Math.max(0,Math.floor(y0)-16)}; R.w=Math.min(W,Math.ceil(x1)+16)-R.x; R.h=Math.min(H,Math.ceil(y1)+16)-R.y;
+    const cv=document.createElement('canvas'); cv.width=R.w; cv.height=R.h; cv.setAttribute('aria-hidden','true');
+    cv.style.cssText=`position:absolute;inset:auto;left:${R.x/W*100}%;top:${R.y/H*100}%;width:${R.w/W*100}%;height:${R.h/H*100}%;pointer-events:none;transform-origin:0 0`;
+    const par=o.canvas&&o.canvas.parentNode; if(par) par.insertBefore(cv,o.canvas.nextSibling);
+    const mk=document.createElement('canvas'); mk.width=R.w; mk.height=R.h;
+    const V={x:Math.max(0,R.x-32),y:Math.max(0,R.y-32)}; V.cv=document.createElement('canvas'); V.cv.width=Math.min(W,R.x+R.w+32)-V.x; V.cv.height=Math.min(H,R.y+R.h+32)-V.y;
+    V.ctx=ctx2d(V.cv); V.t=-1; ctx2d(mk);
+    lip.hc={cv,ctx:ctx2d(cv),R,W,H,V,mask:mk,maskT:null,key:'',css:'',G:[1,0,0,1,R.x,R.y],skala:1,skalaT:0};
+    return lip.hc;
+  }
+  // maska głowy w układzie klatki (przeliczana tylko, gdy tor przesunie się o > 0,7 px)
+  function hcMask(T){
+    const hc=lip.hc, m=hc.maskT;
+    if(m&&Math.abs(m[4]-T[4])<.7&&Math.abs(m[5]-T[5])<.7&&Math.abs(m[0]-T[0])<.002&&Math.abs(m[1]-T[1])<.002) return hc.mask;
+    const x=hc.mask.getContext('2d'); x.setTransform(1,0,0,1,0,0); x.clearRect(0,0,hc.R.w,hc.R.h);
+    x.setTransform(T[0],T[1],T[2],T[3],T[4]-hc.R.x,T[5]-hc.R.y); x.drawImage(lip.headMask.c,lip.headMask.X,lip.headMask.Y); x.setTransform(1,0,0,1,0,0);
+    const M=lip.headMask; let x0=1e9,y0=1e9,x1=-1e9,y1=-1e9;
+    for(const X of [M.X,M.X+M.W]) for(const Y of [M.Y,M.Y+M.H]){ const u=T[0]*X+T[2]*Y+T[4]-hc.R.x, q=T[1]*X+T[3]*Y+T[5]-hc.R.y; x0=Math.min(x0,u); y0=Math.min(y0,q); x1=Math.max(x1,u); y1=Math.max(y1,q); }
+    x0=Math.max(0,Math.floor(x0)-1); y0=Math.max(0,Math.floor(y0)-1); hc.box=[x0,y0,Math.min(hc.R.w,Math.ceil(x1)+1)-x0,Math.min(hc.R.h,Math.ceil(y1)+1)-y0];
+    hc.maskT=T.slice(); return hc.mask;
+  }
+  const usta0=tr=>!!tr&&lip.alpha>=.02;
   function lipFrame(){
     requestAnimationFrame(lipFrame);
-    const c=lip.ctx;
+    lip.tick=(lip.tick||0)+1;
+    const t0=performance.now(); lipDraw(); const dt=performance.now()-t0;
+    lip.koszt=(lip.koszt||0)*.95+dt*.05; if(!lip.wolne&&lip.koszt>7) lip.wolne=true; else if(lip.wolne&&lip.koszt<3) lip.wolne=false;
+  }
+  function lipDraw(){
+    lip.t0d=performance.now();
     // „mówi” = jest dźwięk teraz albo za chwilę (krótkie pauzy między zdaniami się nie liczą)
     const ct=neural.ctx?neural.ctx.currentTime:0, gra=eng.live>0&&lip.segs.some(s=>ct<s.t0+s.dur+.25);
     if(gra!==mowi){ mowi=gra; emit('mowi',mowi); }
-    if(!lip.img||!c) return;
+    if(!lip.img) return;
+    const hc=hcInit(); if(!hc) return;
     const w=o.wideo()||{}, v=w.el, track=w.klip&&lip.tory[w.klip];
     let speaking=false, fa=lip.closed, fb=lip.closed, ff=0, pj=-1;
     if(track&&lip.segs.length&&neural.ctx){
@@ -482,20 +903,29 @@ function utworz(opt){
       if(x&&x.a>=0){ speaking=true; fa=x.a; fb=x.b; ff=x.f; pj=x.j; lip.celNow=x.cel; }
       else if(lip.segs.some(s=>ct<s.t0+s.dur+.25)) speaking=true;
     }
-    const fi=track&&v?Math.min(track.length-1,Math.max(0,Math.round(videoTime(v)*lip.fps))):-1, tr=fi>=0?track[fi]:null;
+    const vt=track&&v?videoTime(v):0, fi=track&&v?Math.min(track.length-1,Math.max(0,Math.round(vt*lip.fps))):-1, tr=fi>=0?track[fi]:null;
     lip.frame=fi;
     if(pj>=0&&fi>=0){ let d=Math.abs(pj-fi); d=Math.min(d,lip.nL-d); const g=lip.diag; g.n++; g.off+=d; g.maxOff=Math.max(g.maxOff,d); }   // trafność przewidywania klatki
     if(!tr||tr[3]<.6) speaking=false;
     lip.alpha+=((speaking?1:0)-lip.alpha)*(speaking?.4:.15);
-    if(lip.last){ c.setTransform(1,0,0,1,0,0); c.clearRect(lip.last[0]-14,lip.last[1]-14,lip.last[2]+28,lip.last[3]+28); lip.last=null; }
-    if(lip.jawLast){ c.setTransform(1,0,0,1,0,0); c.clearRect(lip.jawLast[0]-2,lip.jawLast[1]-2,lip.jawLast[2]+4,lip.jawLast[3]+4); lip.jawLast=null; }
-    if(lip.alpha<.02||!tr) return;
-    const L=lip.lib, x0=L.x0, y0=L.y0, tw=L.tileW, th=L.tileH;
-    const [A,B,Cc,D,E,F]=tr[5];
-    let bx0=1e9,by0=1e9,bx1=-1e9,by1=-1e9;
-    for(const X of [x0,x0+tw]) for(const Y of [y0,y0+th]){ const u=A*X+Cc*Y+E, q=B*X+D*Y+F; bx0=Math.min(bx0,u); by0=Math.min(by0,q); bx1=Math.max(bx1,u); by1=Math.max(by1,q); }
-    lip.last=[bx0,by0,bx1-bx0,by1-by0];
-    c.setTransform(A,B,Cc,D,E,F);
+    // ruch głowy (sprężyna: płynne wejście i powrót po wypowiedzi)
+    const gh=(track&&w.klip==='idle'&&neural.ctx)?glowaAt(ct+o.wyprzedzenie):null;
+    lip.hd+=((gh?gh.dy:0)-lip.hd)*HEAD.k; lip.hr+=((gh?gh.r:0)-lip.hr)*HEAD.k; lip.hb+=((gh?gh.b:0)-lip.hb)*HEAD.k;
+    if(!tr||tr[3]<.6||w.klip!=='idle'){ lip.hd=lip.hr=lip.hb=0; }
+    // pomiar płynności podczas mowy: gdy mimo trybu oszczędnego animacja ma < 32 kl/s, wyłącz ruch głowy (zostają usta, żuchwa, brwi)
+    if(usta0(tr)){ const now0=performance.now(); if(lip.tPrev){ const d=now0-lip.tPrev; if(d<250){ lip.fpsN=(lip.fpsN||0)+1; lip.fpsS=(lip.fpsS||0)+d; } }
+      lip.tPrev=now0; if(lip.fpsN>=90){ if(lip.wolne&&lip.fpsS/lip.fpsN>31.5&&!lip.bezGlowy){ lip.bezGlowy=true; emit('jakosc',{ruchGlowy:false}); } lip.fpsN=lip.fpsS=0; } } else lip.tPrev=0;
+    if(lip.bezGlowy){ lip.hd=lip.hr=0; }
+    const ruch=!!tr&&(Math.abs(lip.hd)>.06||Math.abs(lip.hr)>.0004), brwi=!!tr&&lip.hb>.12, usta=!!tr&&lip.alpha>=.02;
+    // przekształcenie CSS płótna = ruch głowy w układzie klatki (Hf = T·H·T⁻¹), w pikselach płótna
+    let G=[1,0,0,1,hc.R.x,hc.R.y];
+    if(ruch){ const Hf=mul(mul(tr[5],headMatrix(lip.hd,lip.hr)),inv(tr[5])), R=hc.R; G=[Hf[0],Hf[1],Hf[2],Hf[3],Hf[0]*R.x+Hf[2]*R.y+Hf[4],Hf[1]*R.x+Hf[3]*R.y+Hf[5]]; }
+    hc.G=G;
+    const now=performance.now(); if(now-hc.skalaT>500){ hc.skala=(hc.cv.offsetWidth||hc.R.w)/hc.R.w; hc.skalaT=now; }
+    const s=hc.skala, css=ruch?`matrix(${G[0].toFixed(5)},${G[1].toFixed(5)},${G[2].toFixed(5)},${G[3].toFixed(5)},${((G[4]-hc.R.x)*s).toFixed(3)},${((G[5]-hc.R.y)*s).toFixed(3)})`:'none';
+    if(css!==hc.css){ hc.cv.style.transform=css; hc.css=css; }
+    if(!ruch&&!brwi&&!usta){ if(hc.key!==''){ hc.ctx.setTransform(1,0,0,1,0,0); hc.ctx.clearRect(0,0,hc.R.w,hc.R.h); hc.key=''; } lip.cur=usta?lip.cur:lip.cur; return; }
+    // usta
     if(!speaking){ fa=fb=lip.cur>=0?lip.cur:lip.closed; ff=0; }
     if(w.klip==='idle'&&lip.cand&&fi>=0){
       if(speaking&&pj<0){ fa=fb=closedAt(fi); ff=0; }   // krótka pauza między zdaniami: zamknięte usta w tej samej pozie
@@ -503,16 +933,49 @@ function utworz(opt){
     }
     // żuchwa: docelowe opuszczenie brody = różnica otwarcia (nakładka − wideo), z bezwładnością mięśni
     const oNow=lip.open[fa]*(1-ff)+(fb>=0?lip.open[fb]:lip.open[fa])*ff, vo=lip.vopen&&w.klip==='idle'?lip.vopen[fi]:0;
-    const jawT=(speaking||lip.alpha>.02)?Math.max(-1,Math.min(1,oNow-vo))*JAW_PX*lip.alpha:0;
+    const jawT=usta?Math.max(-1,Math.min(1,oNow-vo))*JAW_PX*lip.alpha:0;
     lip.jaw+=(jawT-lip.jaw)*JAW_K;
-    if(Math.abs(lip.jaw)>.15) drawJaw(c,v,tr[5],lip.jaw);
     // przejście: klatki kolejne w nagraniu — twardo jak w wideo (24 kl/s); skok — krótkie przenikanie na końcu kroku
-    //  (długie przenikanie dwóch różnych kształtów daje podwójny kontur i rozmyte wargi)
     let fx=0; if(fb!==fa){ const nat=lip.next[fa]===fb; fx=nat?(ff>=.5?1:0):Math.min(1,Math.max(0,(ff-(1-CFG.przenik))/CFG.przenik)); fx=fx*fx*(3-2*fx); }
     if(fx>=.999){ fa=fb; fx=0; }
-    drawLipTile(c,fa,lip.alpha,x0,y0,tr[5]);
-    if(fb!==fa&&fx>.02) drawLipTile(c,fb,lip.alpha*fx,x0,y0,tr[5]);   // przejście do następnej prawdziwej klatki
-    lip.cur=fa; lip.ffLast=fx; lip.fbLast=fb; c.globalAlpha=1; c.setTransform(1,0,0,1,0,0);
+    lip.cur=fa; lip.ffLast=fx; lip.fbLast=fb;
+    // pobranie klatki wideo (głowa, żuchwa, brwi) — najdroższa operacja; na wolnym urządzeniu co druga klatka wideo
+    // (warstwa spóźnia się wtedy najwyżej o 1 klatkę pętli spoczynkowej, gdzie ruch to ułamek piksela)
+    const V=hc.V, potrzebaWideo=ruch||brwi||Math.abs(lip.jaw)>.15; let vk=Math.round(vt*1000);
+    if(potrzebaWideo&&V.t!==vk&&V.t>=0&&lip.wolne&&((lip.vSkip=(lip.vSkip||0)+1)&1)) vk=V.t;
+    // przerysowanie tylko przy zmianie (na wolnym urządzeniu najwyżej co drugą klatkę ekranu)
+    const key=[potrzebaWideo?vk:0,ruch?1:0,usta?fa:-1,usta?fb:-1,Math.round(fx*12),Math.round(lip.jaw*8),brwi?Math.round(lip.hb*10):0,Math.round(lip.alpha*12)].join(',');
+    { const pr=lip.prof||(lip.prof={}); pr.przed=(pr.przed||0)*.95+(performance.now()-lip.t0d)*.05; pr.n=(pr.n||0)+1; }
+    if(key===hc.key||(lip.wolne&&lip.tick%2&&hc.key!=='')) return;
+    hc.key=key; { const pr=lip.prof; pr.rys=(pr.rys||0)+1; }
+    const c=hc.ctx, R=hc.R, T=tr[5], To=[T[0],T[1],T[2],T[3],T[4]-R.x,T[5]-R.y];
+    // jedno pobranie klatki wideo na przerysowanie (dekodowanie wideo → piksele jest najdroższe); głowa, żuchwa i brwi biorą z kopii
+    const tv=performance.now();
+    if(potrzebaWideo&&V.t!==vk){ V.ctx.globalCompositeOperation='copy'; V.ctx.drawImage(v,V.x,V.y,V.cv.width,V.cv.height,0,0,V.cv.width,V.cv.height); V.t=vk;
+      const pr=lip.prof||(lip.prof={}); pr.wideo=(pr.wideo||0)*.9+(performance.now()-tv)*.1; pr.nw=(pr.nw||0)+1; }
+    c.setTransform(1,0,0,1,0,0); c.globalAlpha=1; c.globalCompositeOperation='source-over'; c.clearRect(0,0,R.w,R.h);
+    if(ruch){   // głowa: kopia wideo bez przekształcania + maska (miękkie brzegi)
+      const tq=performance.now();
+      const mk=hcMask(T), [bx,by,bw,bh]=hc.box;
+      c.drawImage(V.cv,R.x-V.x+bx,R.y-V.y+by,bw,bh,bx,by,bw,bh);
+      c.save(); c.beginPath(); c.rect(bx,by,bw,bh); c.clip();
+      c.globalCompositeOperation='destination-in'; c.drawImage(mk,bx,by,bw,bh,bx,by,bw,bh); c.restore(); c.globalCompositeOperation='source-over';
+      const pr=lip.prof||(lip.prof={}); pr.glowa=(pr.glowa||0)*.9+(performance.now()-tq)*.1;
+    }
+    if(brwi) drawLayer(c,V,T,T,[1,0,0,1,0,-lip.hb],lip.browMask,lip.browCanvas,R);
+    if(usta){
+      if(Math.abs(lip.jaw)>.15){ const sj=lip.jaw/(JAW_CHIN-JAW_Y0); drawLayer(c,V,T,T,[1,0,0,1+sj,0,-sj*JAW_Y0],lip.jawMask,lip.jawCanvas,R); }
+      const L=lip.lib;
+      drawLipTile(c,fa,lip.alpha,L.x0,L.y0,To);
+      if(fb!==fa&&fx>.02) drawLipTile(c,fb,lip.alpha*fx,L.x0,L.y0,To);   // przejście do następnej prawdziwej klatki
+    }
+    c.globalAlpha=1; c.setTransform(1,0,0,1,0,0);
+  }
+  // zrzut nakładki tak, jak ją widać (płótno głowy z jego przekształceniem) — do testów i podglądu
+  function zrzutNakladki(ctx,sx,sy,w,h,dx,dy){
+    const hc=lip.hc; if(!hc) return; const G=hc.G;
+    ctx.save(); ctx.beginPath(); ctx.rect(dx,dy,w,h); ctx.clip();
+    ctx.setTransform(1,0,0,1,dx-sx,dy-sy); ctx.transform(G[0],G[1],G[2],G[3],G[4],G[5]); ctx.drawImage(hc.cv,0,0); ctx.restore();
   }
   requestAnimationFrame(lipFrame);
 
@@ -558,11 +1021,11 @@ function utworz(opt){
     glosySystemowe,
     gotoweUsta:()=>lip.ready,
     // dla testów i diagnostyki
-    wnetrze:{eng,neural,lip,lib,voice,lipFrameAt,poseFix,predictFrames,videoTime,lipShapeAt:t=>{ const x=lipFrameAt(t); return x?x.a:null; },lipTimeline,lipTargets,skrocPauzy,pytanieTakNie,intonacja,glos:GLOS,barwy:BARWY,voiceChain,cfg:CFG,openT:OPEN_T,trimSilence,phonesFromChars,synthNeural,loadLibrary}
+    wnetrze:{eng,neural,lip,lib,voice,lipFrameAt,zrzutNakladki,glowaAt,ruchGlowy,headMatrix,head:HEAD,poseFix,predictFrames,videoTime,lipShapeAt:t=>{ const x=lipFrameAt(t); return x?x.a:null; },lipTimeline,lipTargets,lipSelect,lipSelectRef,skrocPauzy,pytanieTakNie,intonacja,glos:GLOS,barwy:BARWY,voiceChain,cfg:CFG,openT:OPEN_T,trimSilence,phonesFromChars,synthNeural,loadLibrary}
   };
   if(hasTTS) speechSynthesis.addEventListener?.('voiceschanged',()=>emit('glosy',glosySystemowe()));
   return api;
 }
 
-global.EgzoMowa={utworz,liczba:numPL,mowione:spokenPL,zdania:sentences,wersja:'1.0'};
+global.EgzoMowa={utworz,liczba:numPL,porzadkowy:ordPL,mowione:spokenPL,zdania:sentences,zdaniaGotowe,wersja:'1.1'};
 })(typeof window!=='undefined'?window:globalThis);

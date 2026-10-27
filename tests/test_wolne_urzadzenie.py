@@ -1,12 +1,19 @@
 """Słaby telefon: procesor spowolniony 4× (CDP). Mowa ma iść bez dziur i spóźnień, dobór klatek ust
 (z pozą głowy) ma być szybki, a animacja płynna.
-Kryteria: spóźnienia = 0, pauzy 0,1–0,35 s, dobór ust ≤ 60 ms na zdanie, ≥ 30 kl/s w trakcie mowy."""
+Kryteria: spóźnienia = 0, pauzy 0,1–0,35 s, dobór ust ≤ 60 ms na zdanie (mediana 7 pomiarów: spowalnianie CDP
+działa przez usypianie wątku w oknach czasu, więc pojedynczy krótki pomiar bywa kilka razy dłuższy), ≥ 30 kl/s w trakcie mowy.
+Na końcu: najdłuższe zadanie blokujące przy wczytaniu strony (≤ 250 ms przy 4×)."""
 from playwright.sync_api import sync_playwright
 import json, sys, time
 
 URL = sys.argv[1] if len(sys.argv) > 1 else 'http://localhost:8768/egzo-recepcja_2026-10-27.html'
 with sync_playwright() as p:
-    b = p.chromium.launch(args=["--autoplay-policy=no-user-gesture-required"]); pg = b.new_page()
+    b = p.chromium.launch(args=["--autoplay-policy=no-user-gesture-required"])
+    pl = b.new_page(); c0 = pl.context.new_cdp_session(pl); c0.send("Emulation.setCPUThrottlingRate", {"rate": 4})
+    pl.add_init_script("()=>{}"); pl.add_init_script("""(()=>{ window.__lt=0; new PerformanceObserver(l=>{ for(const e of l.getEntries()) if(e.startTime>800) window.__lt=Math.max(window.__lt,e.duration); }).observe({type:'longtask',buffered:true}); })()""")
+    pl.goto(URL); pl.evaluate("async()=>{ await mowa.gotoweUsta(); }"); pl.wait_for_timeout(1500)
+    longest = pl.evaluate("()=>Math.round(__lt)"); pl.close()
+    pg = b.new_page()
     errs = []; pg.on("pageerror", lambda e: errs.append(str(e)))
     pg.goto(URL); pg.wait_for_timeout(2500)
     pg.click('#voiceBtn')
@@ -17,8 +24,8 @@ with sync_playwright() as p:
     # czas doboru klatek ust dla zdania ~3 s (z pozą głowy)
     sel = pg.evaluate("""async()=>{ const W=mowa.wnetrze; const m=await W.synthNeural('Wygląda na zamówienie terrarium sto dwadzieścia na sześćdziesiąt.');
       const tr=W.trimSilence(m.pcm.slice(),m.sampleRate), ms=[];
-      for(let i=0;i<5;i++){ const t0=performance.now(); W.lipTimeline(m,tr.offset,tr.pcm.length/m.sampleRate,tr.pcm,W.neural.ctx.currentTime+.1); ms.push(performance.now()-t0); }
-      return {ms:Math.max(...ms.slice(1)), sek:+(tr.pcm.length/m.sampleRate).toFixed(2)}; }""")
+      for(let i=0;i<8;i++){ const t0=performance.now(); W.lipTimeline(m,tr.offset,tr.pcm.length/m.sampleRate,tr.pcm,W.neural.ctx.currentTime+.1); ms.push(performance.now()-t0); }
+      const s=ms.slice(1).sort((a,b)=>a-b); return {ms:s[3], max:s[6], sek:+(tr.pcm.length/m.sampleRate).toFixed(2)}; }""")
     pg.evaluate("""()=>{ const W=mowa.wnetrze; W.eng.stats=[]; window.__fr=[];
       const loop=t=>{ __fr.push(t); if(mowa.zajeta||__fr.length<30) requestAnimationFrame(loop); }; requestAnimationFrame(loop);
       mowa.powiedz('Dziękuję za dokument. Już go czytam i zaraz powiem, co w nim jest. Wygląda na zamówienie terrarium sto dwadzieścia na sześćdziesiąt. Czy mam je od razu przekazać do akceptacji?'); }""")
@@ -31,9 +38,10 @@ with sync_playwright() as p:
     b.close()
 gaps = [s['gap'] for s in st[1:]]; late = [s['late'] for s in st]
 print('procesor 4× wolniej')
-print('dobór klatek ust:', round(sel['ms'], 1), 'ms dla', sel['sek'], 's mowy')
+print('dobór klatek ust: mediana', round(sel['ms'], 1), 'ms (maks', round(sel['max'], 1), 'ms) dla', sel['sek'], 's mowy')
 print('pauzy:', gaps, '| spóźnienia:', late, '| synteza ms:', [s['synthMs'] for s in st])
 print('klatek/s w trakcie mowy:', fps)
-ok = sel['ms'] <= 60 and all(x == 0 for x in late) and gaps and all(0.1 <= g <= 0.35 for g in gaps) and fps >= 30 and not errs
+print('najdłuższe zadanie blokujące przy wczytaniu (po starcie skryptu):', longest, 'ms')
+ok = sel['ms'] <= 60 and all(x == 0 for x in late) and gaps and all(0.1 <= g <= 0.35 for g in gaps) and fps >= 30 and longest <= 250 and not errs
 print('BŁĘDY STRONY:', errs); print('WYNIK:', 'OK' if ok else 'NIE ZALICZONY')
 sys.exit(0 if ok else 1)

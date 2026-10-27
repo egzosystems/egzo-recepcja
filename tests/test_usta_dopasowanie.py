@@ -5,7 +5,7 @@ S = '/tmp/claude-0/-home-claude/39a6a5a9-976f-544e-a9ce-9948c9a77f8c/scratchpad'
 GRAB = """()=>{ const v=front, fi=Math.min(lip.track.length-1,Math.round(v.currentTime*24)), tr=lip.track[fi];
   const c=document.createElement('canvas'); c.width=120; c.height=100; const x=c.getContext('2d');
   const sx=tr[0]-60, sy=tr[1]-55;
-  x.drawImage(v,sx,sy,120,100,0,0,120,100); x.drawImage(lip.canvas,sx,sy,120,100,0,0,120,100);
+  x.drawImage(v,sx,sy,120,100,0,0,120,100); mowa.wnetrze.zrzutNakladki(x,sx,sy,120,100,0,0);
   const ct=neural.ctx.currentTime+.04, sh=lipShapeAt(ct);
   return {img:c.toDataURL('image/png'), ang:tr[4], a:+lip.alpha.toFixed(2), tile:lip.lastTile, sh:sh===null?'-':(sh<0?'?':'o'+lip.open[sh].toFixed(2))}; }"""
 with sync_playwright() as p:

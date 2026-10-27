@@ -22,7 +22,7 @@ GRAB = """()=>new Promise(res=>requestAnimationFrame(()=>{
   const tr=lip.track[fi], cx=Math.round(tr[0]), cy=Math.round(tr[1]), w=150, h=120;
   const c=document.createElement('canvas'); c.width=w*2; c.height=h; const x=c.getContext('2d');
   x.drawImage(v,cx-w/2,cy-h/2,w,h,0,0,w,h);
-  x.drawImage(v,cx-w/2,cy-h/2,w,h,w,0,w,h); x.drawImage(lip.canvas,cx-w/2,cy-h/2,w,h,w,0,w,h);
+  x.drawImage(v,cx-w/2,cy-h/2,w,h,w,0,w,h); mowa.wnetrze.zrzutNakladki(x,cx-w/2,cy-h/2,w,h,w,0);
   res({img:c.toDataURL('image/png'), fi, ang:tr[4], tile:lip.cur, open:lip.open[lip.cur], fixes:lip.fixes});
 }))"""
 

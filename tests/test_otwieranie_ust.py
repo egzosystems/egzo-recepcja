@@ -18,7 +18,7 @@ REC = """()=>{ const W=mowa.wnetrze, L=W.lip; window.__rec=[]; window.__best=nul
   const loop=()=>{ if(L.alpha>.9&&L.cur>=0&&L.frame>=0){ const o=L.open[L.cur]; __rec.push(o);
       if(!__best||o>__best.o){ const v=front, tr=L.track[L.frame], cx=Math.round(tr[0]), cy=Math.round(tr[1]), w=150, h=120;
         const c=document.createElement('canvas'); c.width=w*2; c.height=h; const x=c.getContext('2d');
-        x.drawImage(v,cx-w/2,cy-h/2,w,h,0,0,w,h); x.drawImage(v,cx-w/2,cy-h/2,w,h,w,0,w,h); x.drawImage(L.canvas,cx-w/2,cy-h/2,w,h,w,0,w,h);
+        x.drawImage(v,cx-w/2,cy-h/2,w,h,0,0,w,h); x.drawImage(v,cx-w/2,cy-h/2,w,h,w,0,w,h); mowa.wnetrze.zrzutNakladki(x,cx-w/2,cy-h/2,w,h,w,0);
         __best={o, fi:L.frame, wirt:!!L.emat[L.cur], img:c.toDataURL('image/png')}; } }
     if(mowa.zajeta||__rec.length<5) requestAnimationFrame(loop); };
   requestAnimationFrame(loop); }"""

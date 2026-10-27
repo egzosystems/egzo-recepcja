@@ -190,17 +190,18 @@ ringM = (ellA > 0.45) & (ellA < 1.0) & ~lipsM
 g_ = lambda c: cv2.GaussianBlur(cv2.cvtColor(c, cv2.COLOR_BGR2GRAY).astype(np.float32), (0, 0), 1.2)
 PT = np.array([f['poza'] for f in frames])
 virt, used = [], {}
-for a in range(0, len(idle), ANCHOR_STEP):
-    if nin[a] < 0.85: continue
-    d = np.linalg.norm(PT - Pi[a], axis=1)
-    near_open = max([f['fo'] for f, dd in zip(frames, d) if dd <= POSE_LIMIT] or [0])
-    if near_open >= 0.6: continue                     # ta poza ma własne otwarte usta
-    dst = crop_of(idle[a][2], Ts[a]); gd = g_(dst)
-    lab_a = cv2.cvtColor(dst, cv2.COLOR_BGR2LAB).astype(np.float32)[ringM].mean(0)
-    for k, f in enumerate(frames):
-        if f['fo'] < 0.25 or d[k] <= POSE_LIMIT: continue
+# kotwice według zmiany pozy (przy przechylaniu poza zmienia się szybko — kotwice gęściej, w prostej pozie rzadziej)
+anchors, last = [], None
+for j in range(len(idle)):
+    if nin[j] < 0.85: continue
+    if last is None or np.linalg.norm(Pi[j] - Pi[last]) > 11 or j - last >= ANCHOR_STEP:
+        anchors.append(j); last = j
+def przenies(a, dst, gd, lab_a, zrodla, limit):
+    n = 0
+    for k in zrodla:
+        if n >= limit: break
         try:
-            cc, W = cv2.findTransformECC(gd, g_(f['crop']), np.eye(2, 3, dtype=np.float32), cv2.MOTION_AFFINE,
+            cc, W = cv2.findTransformECC(gd, g_(frames[k]['crop']), np.eye(2, 3, dtype=np.float32), cv2.MOTION_AFFINE,
                                          (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 300, 1e-6), regM, 3)
         except cv2.error:
             continue
@@ -208,7 +209,23 @@ for a in range(0, len(idle), ANCHOR_STEP):
         if cc < 0.9 or abs(rot) > 15 or not 0.85 < sc < 1.18: continue
         C = cv2.invertAffineTransform(W)              # piksel klatki źródłowej → miejsce w pozie kotwicy
         used.setdefault(k, []).append(lab_a)
-        virt.append(dict(k=k, a=a, m=C, rot=rot))
+        virt.append(dict(k=k, a=a, m=C, rot=rot)); n += 1
+    return n
+n_open = n_closed = 0
+for a in anchors:
+    d = np.linalg.norm(PT - Pi[a], axis=1)
+    near = [f['fo'] for f, dd in zip(frames, d) if dd <= POSE_LIMIT]
+    need_open, need_closed = max(near or [0]) < 0.6, min(near or [1]) > 0.1
+    if not (need_open or need_closed): continue
+    dst = crop_of(idle[a][2], Ts[a]); gd = g_(dst)
+    lab_a = cv2.cvtColor(dst, cv2.COLOR_BGR2LAB).astype(np.float32)[ringM].mean(0)
+    order = sorted(range(len(frames)), key=lambda k: d[k])          # najpierw źródła o najbliższej pozie (mniejsza korekta)
+    if need_open:    # w tej pozie nagranie nie ma otwartych ust — po kilka z każdego przedziału otwarcia (najbliższe w pozie)
+        for lo, hi in ((.25, .4), (.4, .55), (.55, .7), (.7, .85), (.85, 1.01)):
+            n_open += przenies(a, dst, gd, lab_a, [k for k in order if lo <= frames[k]['fo'] < hi and d[k] > POSE_LIMIT], 7)
+    if need_closed:  # w tej pozie nagranie nie ma zamkniętych ust (m/b/p nie mogłyby się domknąć)
+        n_closed += przenies(a, dst, gd, lab_a, [k for k in order if frames[k]['fo'] <= 0.08 and d[k] > POSE_LIMIT], 14)
+print(f'kotwice: {len(anchors)} | przeniesione usta otwarte: {n_open}, zamknięte: {n_closed}')
 # kolor: jedna przebarwiona kopia każdej przenoszonej klatki (do średniego koloru skóry kotwic, w których jest użyta)
 copy_of = {}
 for k, labs in used.items():
@@ -218,7 +235,7 @@ for k, labs in used.items():
     copy_of[k] = len(frames); frames.append(nf); nxt.append(-1)
 vidx = {(v['k'], v['a']): n for n, v in enumerate(virt)}
 vnext = [vidx.get((nxt[v['k']], v['a']), -1) if nxt[v['k']] >= 0 else -1 for v in virt]
-print(f'przeniesione otwarte usta: {len(virt)} klatek wirtualnych w {len(set(v["a"] for v in virt))} kotwicach | korekta kąta {min(v["rot"] for v in virt):+.1f}…{max(v["rot"] for v in virt):+.1f}°' if virt else 'przeniesione otwarte usta: brak')
+print(f'klatki wirtualne: {len(virt)} w {len(set(v["a"] for v in virt))} kotwicach | korekta kąta {min(v["rot"] for v in virt):+.1f}…{max(v["rot"] for v in virt):+.1f}°' if virt else 'klatki wirtualne: brak')
 # wyostrzenie: wyrównanie, kompresja i rysowanie z obrotem zabierają wargom ok. 30% ostrości
 # (zmierzone: tests/test_realizm.py, „ostrość”); lekka maska wyostrzająca przywraca ostrość wideo
 SHARP_A, SHARP_S = 0.5, 0.8

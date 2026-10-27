@@ -36,7 +36,7 @@ SETUP = """()=>{ const W=mowa.wnetrze, L=W.lip, ctx=W.neural.ctx;
   window.__ring=ring; window.__lips=lips; }"""
 REC = """()=>{ window.__rec=[]; let prevC=null, prevR=null; const W=mowa.wnetrze, L=W.lip, ctx=W.neural.ctx;
   const grab=(withLip,tr)=>{ const x=__cx, v=front, cx=Math.round(tr[0]), cy=Math.round(tr[1]);
-    x.drawImage(v,cx-75,cy-60,150,120,0,0,150,120); if(withLip) x.drawImage(L.canvas,cx-75,cy-60,150,120,0,0,150,120);
+    x.drawImage(v,cx-75,cy-60,150,120,0,0,150,120); if(withLip) mowa.wnetrze.zrzutNakladki(x,cx-75,cy-60,150,120,0,0);
     const d=x.getImageData(0,0,150,120).data, g=new Float32Array(150*120); for(let i=0;i<g.length;i++) g[i]=.3*d[i*4]+.59*d[i*4+1]+.11*d[i*4+2]; return g; };
   const md=(a,b,idx)=>{ let s=0; for(const i of idx) s+=Math.abs(a[i]-b[i]); return s/idx.length; };
   const loop=()=>{ __an.getFloatTimeDomainData(__buf); let r=0; for(const s of __buf) r+=s*s; r=Math.sqrt(r/__buf.length);
