@@ -87,6 +87,14 @@
 - Przyczyna 3: kształty z klipu powitania to szeroki uśmiech — stonowane do 60% ruchu od zamkniętych ust (o 75%, o2 70%, u 85%) (`tools/stonuj_usta.py`).
 - Arkusz wizemów zostaje jako wzorzec przypisania głosek; przeniesienie ruchu dla pozostałych kształtów dawało artefakty na krawędziach — odrzucone.
 
+## Usta z prawdziwych klatek (wersja 9) — bez żadnego dorysowywania
+- Diagnoza na zrzutach ×3 z ekranu telefonu: deformacje robiły fazy przejściowe z przepływu optycznego (rozmazane wargi), dzióbek „u” z przeniesienia ruchu (napuchnięty) i kształty z innej pozy.
+- Teraz: biblioteka 54 PRAWDZIWYCH klatek dolnej części twarzy (usta, żuchwa, broda) z pętli spoczynkowej, wyrównanych ECC do kadru bazowego i dopasowanych kolorem (`tools/usta_z_klatek.py`, `lip/usta-klatki.webp`).
+- Podczas mowy: cel otwarcia ust co 40 ms z głosek (czasy liter z modelu głosu) i głośności; programowanie dynamiczne wybiera ciąg klatek (koszt: różnica otwarcia + skok; kolejne klatki z nagrania bez kosztu); między klatkami tylko przenikanie sąsiednich prawdziwych klatek. Nakładka z pełnym przekształceniem toru (obrót głowy).
+- Zakres: od zamkniętych do najszerzej rozchylonych ust z pętli; ok. 25–50% przejść to naturalna kolejność z nagrania.
+- Klatki mówienia z powitania odrzucone: głowa przechylona o 20–25° i szeroki uśmiech — po wklejeniu zmieniają kształt dolnej części twarzy.
+- Ograniczenie: pętla spoczynkowa ma tylko lekkie rozchylenia warg (bez szeroko otwartych ust i zębów) → mowa delikatna. Pełna artykulacja wymaga klipu „mówi w pozie spoczynkowej” z Veo — wystarczy go przepuścić przez `tools/usta_z_klatek.py` razem z pętlą.
+
 ## Plan
 1. Ujęcia obiegu: 05 odczyt, 06 analiza, 08 segregowanie, 12 odłożenie (prompty w `docs/ujecia.md`).
 2. Poprawki logo na ścianie → nowy kadr bazowy (wtedy klipy generujemy już z niego).

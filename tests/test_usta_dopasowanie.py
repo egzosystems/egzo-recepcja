@@ -7,7 +7,7 @@ GRAB = """()=>{ const v=front, fi=Math.min(lip.track.length-1,Math.round(v.curre
   const sx=tr[0]-60, sy=tr[1]-55;
   x.drawImage(v,sx,sy,120,100,0,0,120,100); x.drawImage(lip.canvas,sx,sy,120,100,0,0,120,100);
   const ct=neural.ctx.currentTime+.04, sh=lipShapeAt(ct);
-  return {img:c.toDataURL('image/png'), ang:tr[4], a:+lip.alpha.toFixed(2), tile:lip.lastTile, sh:sh===null?'-':sh===255?'Z':lip.mm.shapes[sh]}; }"""
+  return {img:c.toDataURL('image/png'), ang:tr[4], a:+lip.alpha.toFixed(2), tile:lip.lastTile, sh:sh===null?'-':(sh<0?'?':'o'+lip.open[sh].toFixed(2))}; }"""
 with sync_playwright() as p:
     b = p.chromium.launch(args=["--autoplay-policy=no-user-gesture-required"])
     pg = b.new_page(viewport={"width": 1280, "height": 900}); errs = []; pg.on("pageerror", lambda e: errs.append(str(e)))

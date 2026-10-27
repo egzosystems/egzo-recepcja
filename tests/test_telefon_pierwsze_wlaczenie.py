@@ -12,7 +12,7 @@ with sync_playwright() as p:
         pg.wait_for_timeout(250)
         r=pg.evaluate("""()=>{ const ct=neural.ctx?neural.ctx.currentTime:0; const sh=lip.segs.length?lipShapeAt(ct+.04):null;
           const playing=eng.sources.length>0&&lip.segs.some(s=>ct>=s.t0&&ct<s.t0+s.dur);
-          return [neural.state, cur.id, front.src.split('/').pop().slice(5,16), playing, sh===null?'-':sh===255?'Z':lip.meta.shapes[sh], +lip.alpha.toFixed(2), document.getElementById('subline').innerText.slice(0,40)] }""")
+          return [neural.state, cur.id, front.src.split('/').pop().slice(5,16), playing, sh===null?'-':(sh<0?'?':'o'+lip.open[sh].toFixed(1)), +lip.alpha.toFixed(2), document.getElementById('subline').innerText.slice(0,40)] }""")
         rows.append((round(time.time()-t0,2),r))
         if r[0]=='ready' and time.time()-t0>12 and not r[3] and pg.evaluate("()=>eng.live===0&&!eng.busy&&!eng.pend.length"): break
     st=pg.evaluate("()=>eng.stats")

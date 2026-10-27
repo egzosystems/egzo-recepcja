@@ -699,15 +699,15 @@ function spokenPL(t){
 }
 
 /* ---------- Synchronizacja ust: czasy liter z modelu + polska wymowa ---------- */
-const lip={img:null,meta:null,mm:null,track:null,segs:[],alpha:0,from:0,to:0,tStart:0,last:null,canvas:document.getElementById('lipCanvas')};
+const lip={img:null,lib:null,track:null,segs:[],alpha:0,cur:-1,last:null,canvas:document.getElementById('lipCanvas')};
 lip.ctx=lip.canvas.getContext('2d');
 (async()=>{ try{
-  const [meta,track,mm]=await Promise.all([fetch('lip/usta-atlas.json').then(r=>r.json()),fetch('lip/usta-tor.json').then(r=>r.json()),fetch('lip/usta-morph.json').then(r=>r.json())]);
-  const img=new Image(); img.src='lip/usta-morph.webp'; await img.decode();
-  lip.meta=meta; lip.mm=mm; lip.track=track.idle; lip.img=img; lip.SH=Object.fromEntries(meta.shapes.map((n,i)=>[n,i]));
-  lip.CLOSED_I=mm.shapes.indexOf('closed'); lip.from=lip.to=lip.lastTile=lip.CLOSED_I; lip.NB=mm.shapes.length;
-  // odwrotna mapa faz: kafelek → [kształt bliższy]
-  lip.near={}; for(const [k,ids] of Object.entries(mm.pair)){ const [a,b]=k.split(',').map(Number); lip.near[ids[0]]=a; lip.near[ids[1]]=b; lip.near[ids[2]]=b; }
+  // prawdziwe klatki dolnej części twarzy (z jej wideo), wyrównane do kadru bazowego — bez dorysowywania kształtów
+  const [libj,track]=await Promise.all([fetch('lip/usta-klatki.json').then(r=>r.json()),fetch('lip/usta-tor.json').then(r=>r.json())]);
+  const img=new Image(); img.src='lip/usta-klatki.webp'; await img.decode();
+  lip.lib=libj; lip.track=track.idle; lip.img=img;
+  lip.open=Float32Array.from(libj.frames.map(f=>f.open)); lip.next=Int16Array.from(libj.next);
+  lip.closed=lip.open.indexOf(Math.min(...lip.open));
 }catch(e){ lip.img=null; } })();
 const CLOSED=255;   // usta zamknięte = prawdziwe usta z wideo (nakładka znika)
 const VOWELS='aąeęioóuy';
@@ -739,109 +739,87 @@ function visClass(p){
   if(p==='l') return 'L'; if(p==='r') return 'R'; if(p==='k'||p==='g') return 'KG'; if(p==='ch'||p==='h') return 'CH';
   return 'TDN';   // t d n ń i reszta
 }
-function lipTimeline(m,text,offset,total,pcm){
-  const step=.01, n=Math.max(1,Math.ceil(total/step)), out=new Uint8Array(n).fill(CLOSED);
-  const SH=lip.SH||{}; if(!m.dur||!m.chars) return lipFallback(pcm,m.sampleRate,text,n);
-  // głośność co 10 ms (siła otwarcia)
-  const sr=m.sampleRate, hop=Math.round(sr*step), env=new Float32Array(n);
-  for(let i=0;i<n;i++){ let a=0; const s=i*hop, e=Math.min(pcm.length,s+2*hop); for(let k=s;k<e;k++) a+=pcm[k]*pcm[k]; env[i]=Math.sqrt(a/Math.max(1,e-s)); }
+const LIP_FPS=25;
+// docelowe otwarcie ust (0 = zamknięte, 1 = najszerzej w bibliotece) dla klasy głoski
+const OPEN_T={A:1,O:.85,E:.72,Y:.62,U:.55,I:.5,SH:.55,S:.4,L:.55,R:.55,TDN:.5,KG:.6,CH:.6,FV:.28,MBP:0};
+function lipTargets(m,offset,total,pcm){
+  const n=Math.max(1,Math.ceil(total*LIP_FPS)), tg=new Float32Array(n);
+  const sr=m.sampleRate, hop=Math.round(sr/LIP_FPS), env=new Float32Array(n);
+  for(let i=0;i<n;i++){ let a=0; const s=i*hop, e=Math.min(pcm.length,s+hop); for(let k=s;k<e;k++) a+=pcm[k]*pcm[k]; env[i]=Math.sqrt(a/Math.max(1,e-s)); }
   const srt=Array.from(env).sort((a,b)=>a-b), p95=srt[Math.floor(.95*(n-1))]||1; for(let i=0;i<n;i++) env[i]=Math.min(1,env[i]/p95);
-  const fr=m.hop/sr, units=phonesFromChars(m.chars,m.dur);
-  let t=-offset; const seg=[];
-  for(const u of units){ const t0=t, t1=t+u.d*fr; t=t1; seg.push({v:visClass(u.p),p:u.p,t0,t1}); }
-  const ROUND={O:'o',U:'u',SH:'o2'};
-  const nearVowel=(k)=>{ for(let d=1;d<4;d++){ for(const x of [seg[k+d],seg[k-d]]) if(x&&'AEIYOU'.includes(x.v)&&x.v.length===1) return x.v; } return 'E'; };
-  for(let k=0;k<seg.length;k++){
-    const g=seg[k]; let a=Math.max(0,Math.floor(g.t0/step)), b=Math.min(n,Math.ceil(g.t1/step));
-    if(b<=a) continue;
-    let L=0; for(let i=a;i<b;i++) L=Math.max(L,env[i]);
-    let sh;
-    switch(g.v){
-      case 'SIL': {
-        const long=(g.t1-g.t0)>(/[.,!?;:…]/.test(g.p)?.07:.16);
-        if(long){ sh=CLOSED; break; }
-        const nb=[seg[k-1],seg[k+1]];
-        sh=nb.some(x=>x&&x.v==='MBP')?CLOSED:'slight'; break; }
-      case 'A': sh=L>.45?'open':'mid'; break;
-      case 'E': case 'Y': sh=L>.45?'wide':'slight'; break;
-      case 'I': sh=L>.5?'teeth':'s'; break;
-      case 'O': sh='o'; break;
-      case 'U': sh='u'; break;
-      case 'MBP': sh=CLOSED; break;
-      case 'FV': sh='slight'; break;
-      case 'SH': sh='o2'; break;
-      case 'S': sh='s'; break;
-      case 'KG': case 'CH': sh='mid'; break;
-      default: { const v=nearVowel(k); sh=(v==='O'||v==='U'||v==='A')?'mid':'slight'; }   // t d n l r
+  if(!m.dur||!m.chars){ for(let i=0;i<n;i++) tg[i]=env[i]<.12?0:Math.min(1,.25+env[i]*.8); return tg; }
+  const fr=m.hop/sr, units=phonesFromChars(m.chars,m.dur); let t=-offset; const seg=[];
+  for(const u of units){ const t0=t,t1=t+u.d*fr; t=t1; seg.push({v:visClass(u.p),p:u.p,t0,t1}); }
+  for(let i=0;i<n;i++){
+    const tm=(i+.5)/LIP_FPS, g=seg.find(s=>tm>=s.t0&&tm<s.t1);
+    let o;
+    if(!g) o=0;
+    else if(g.v==='SIL') o=(g.t1-g.t0)>(/[.,!?;:…]/.test(g.p)?.07:.16)?0:.3;
+    else o=OPEN_T[g.v]??.5;
+    tg[i]=Math.min(1,o*(.75+.45*env[i]));        // głośniej = szerzej
+  }
+  return tg;
+}
+// wybór klatek: koszt = różnica otwarcia + skok między nienastępującymi po sobie klatkami
+function lipSelect(tg){
+  const N=lip.open.length, T=tg.length, cost=new Float32Array(N), back=new Int16Array(T*N);
+  for(let f=0;f<N;f++) cost[f]=Math.abs(lip.open[f]-tg[0])+(f===lip.closed?0:.05);
+  const nc=new Float32Array(N);
+  for(let t=1;t<T;t++){
+    for(let f=0;f<N;f++){
+      let best=1e9,bi=0;
+      for(let g=0;g<N;g++){
+        const tr=lip.next[g]===f?0:(g===f?.03:.08+.25*Math.abs(lip.open[g]-lip.open[f]));
+        const c=cost[g]+tr; if(c<best){best=c;bi=g;}
+      }
+      nc[f]=best+Math.abs(lip.open[f]-tg[t]); back[t*N+f]=bi;
     }
-    const id=sh===CLOSED?CLOSED:(SH[sh]??SH.slight??1);
-    for(let i=a;i<b;i++) out[i]=id;
-    // zaokrąglenie warg zaczyna się wcześniej (antycypacja): spółgłoska przed o/u/sz bierze kształt warg (ostatnie 50 ms)
-    if(ROUND[g.v]&&k>0){ const pv=seg[k-1]; if(pv&&['TDN','KG','S','L','R','CH'].includes(pv.v)){ for(let i=Math.max(Math.floor(pv.t0/step),a-5);i<a;i++) if(i>=0) out[i]=id; } }
+    cost.set(nc);
   }
-  // wygładzenie: kształty krótsze niż 30 ms między dwoma otwartymi kształtami przejmują sąsiada;
-  // otwarcia przy domknięciu (np. „a” w „mama”) zostają — to najbardziej widoczny ruch ust
-  for(let pass=0;pass<2;pass++) for(let i=1;i<n-1;i++){
-    if(out[i]===CLOSED) continue;
-    let j=i; while(j<n&&out[j]===out[i]) j++;
-    const prev=out[i-1], next=j<n?out[j]:CLOSED;
-    if(j-i<3&&prev!==CLOSED&&next!==CLOSED){ for(let k=i;k<j;k++) out[k]=prev; }
-    i=j-1;
-  }
+  let f=0; for(let g=1;g<N;g++) if(cost[g]<cost[f]) f=g;
+  const out=new Int16Array(T); for(let t=T-1;t>=0;t--){ out[t]=f; f=back[t*N+f]; }
   return out;
 }
-function lipFallback(pcm,sr,text,n){   // głos bez czasów liter (np. Gosia): głośność + samogłoski
-  const SH=lip.SH||{}, hop=Math.round(sr*.01), env=new Float32Array(n), out=new Uint8Array(n).fill(CLOSED);
-  for(let i=0;i<n;i++){ let a=0; const s=i*hop, e=Math.min(pcm.length,s+2*hop); for(let k=s;k<e;k++) a+=pcm[k]*pcm[k]; env[i]=Math.sqrt(a/Math.max(1,e-s)); }
-  const srt=Array.from(env).sort((a,b)=>a-b), p95=srt[Math.floor(.95*(n-1))]||1;
-  for(let i=0;i<n;i++){ const L=env[i]/p95; out[i]=L<.12?CLOSED:SH[L>.55?'a':L>.3?'tdn':'slight']; }
-  return out;
+function lipTimeline(m,text,offset,total,pcm){
+  if(!lip.lib) return new Int16Array(Math.max(1,Math.ceil(total*LIP_FPS))).fill(-1);
+  return lipSelect(lipTargets(m,offset,total,pcm));
 }
-function lipShapeAt(t){
-  for(const s of lip.segs){ if(t>=s.t0&&t<s.t0+s.dur){ const i=Math.floor((t-s.t0)/.01); return s.tl[Math.min(s.tl.length-1,i)]; } }
-  return null;   // poza mową
+function lipFrameAt(t){
+  for(const s of lip.segs){ if(t>=s.t0&&t<s.t0+s.dur){ const pos=(t-s.t0)*LIP_FPS, k=Math.floor(pos);
+    return {a:s.tl[Math.min(s.tl.length-1,k)], b:s.tl[Math.min(s.tl.length-1,k+1)], f:pos-k}; } }
+  return null;
 }
-// kafelek dla etapu przejścia a→b (0..1): kształt, 3 fazy z przepływu optycznego, kształt
-function morphTile(a,b,p){
-  if(a===b||p>=.875) return b; if(p<.125) return a;
-  const k=a<b?`${a},${b}`:`${b},${a}`, ids=lip.mm.pair[k]; if(!ids) return p<.5?a:b;
-  const step=p<.375?0:p<.625?1:2; return a<b?ids[step]:ids[2-step];
+function lipShapeAt(t){ const x=lipFrameAt(t); return x?x.a:null; }   // (testy)
+function drawLipTile(c,idx,alpha,x0,y0){
+  const L=lip.lib, tw=L.tileW, th=L.tileH, sx=(idx%L.cols)*tw, sy=Math.floor(idx/L.cols)*th;
+  c.globalAlpha=alpha; c.drawImage(lip.img,sx,sy,tw,th,x0,y0,tw,th);
 }
-const MORPH_MS=72;
 function lipFrame(now){
   requestAnimationFrame(lipFrame);
   const c=lip.ctx;
   if(!lip.img) return;
   const v=front, onIdle=v.style.opacity==='1'&&byId.idle.src&&v.src.endsWith(byId.idle.src);
-  let speaking=false, shape=lip.CLOSED_I;
+  let speaking=false, fa=lip.closed, fb=lip.closed, ff=0;
   if(lip.segs.length&&onIdle&&neural.ctx){
-    const sh=lipShapeAt(neural.ctx.currentTime+.04);   // obraz wyprzedza dźwięk o 40 ms
-    if(sh!==null){ speaking=true; shape=sh===CLOSED?lip.CLOSED_I:sh; }
-    else if(lip.segs.some(s=>neural.ctx.currentTime<s.t0+s.dur+.25)){ speaking=true; }   // krótka pauza między zdaniami: usta domknięte nakładką
+    const x=lipFrameAt(neural.ctx.currentTime+.04);   // obraz wyprzedza dźwięk o 40 ms
+    if(x&&x.a>=0){ speaking=true; fa=x.a; fb=x.b; ff=x.f; }
+    else if(lip.segs.some(s=>neural.ctx.currentTime<s.t0+s.dur+.25)){ speaking=true; }   // krótka pauza między zdaniami
   }
   const fi=Math.min(lip.track.length-1,Math.max(0,Math.round(v.currentTime*24))), tr=lip.track[fi];
   if(!tr||tr[3]<.6) speaking=false;
-  // zmiana celu: nowe przejście startuje z kształtu, który właśnie widać
-  const shown=lip.lastTile<lip.NB?lip.lastTile:(lip.near[lip.lastTile]??lip.to);
-  if(shape!==lip.to){ lip.from=shown; lip.to=shape; lip.tStart=now; }
-  let tile=morphTile(lip.from,lip.to,Math.min(1,(now-lip.tStart)/MORPH_MS));
-  // nigdy dwa różne kształty w kolejnych klatkach (ważne przy słabym procesorze): wstawiamy fazę pośrednią
-  if(lip.lastTile<lip.NB&&tile<lip.NB&&tile!==lip.lastTile&&lip.alpha>.02) tile=morphTile(lip.lastTile,tile,.5);
-  lip.lastTile=tile;
-  // wejście i wyjście z mowy: nakładka z zamkniętymi ustami jest prawie identyczna z wideo, więc znika niezauważalnie
-  lip.alpha+=((speaking?1:0)-lip.alpha)*(speaking?.5:.18);
-  if(!speaking&&lip.to!==lip.CLOSED_I){ lip.from=shown; lip.to=lip.CLOSED_I; lip.tStart=now; }
+  lip.alpha+=((speaking?1:0)-lip.alpha)*(speaking?.4:.15);
   if(lip.last){ c.setTransform(1,0,0,1,0,0); c.clearRect(lip.last[0]-3,lip.last[1]-3,lip.last[2]+6,lip.last[3]+6); lip.last=null; }
   if(lip.alpha<.02||!tr) return;
-  const mm=lip.mm, tw=mm.tileW, th=mm.tileH, sx=(tile%mm.cols)*tw, sy=Math.floor(tile/mm.cols)*th;
-  // kafelek w układzie kadru bazowego, przekształcony do bieżącej klatki (położenie, skala, obrót głowy)
-  const x0=582-tw/2, y0=227+mm.offY-th/2;
+  const L=lip.lib, x0=L.x0, y0=L.y0, tw=L.tileW, th=L.tileH;
   const T=tr[5]||[tr[2],0,0,tr[2],tr[0]-582*tr[2],tr[1]-227*tr[2]];
-  const [A,B,Cc,D,E,F]=T, xs=[x0,x0+tw], ys=[y0,y0+th]; let bx0=1e9,by0=1e9,bx1=-1e9,by1=-1e9;
-  for(const X of xs) for(const Y of ys){ const u=A*X+Cc*Y+E, v=B*X+D*Y+F; bx0=Math.min(bx0,u); by0=Math.min(by0,v); bx1=Math.max(bx1,u); by1=Math.max(by1,v); }
+  const [A,B,Cc,D,E,F]=T; let bx0=1e9,by0=1e9,bx1=-1e9,by1=-1e9;
+  for(const X of [x0,x0+tw]) for(const Y of [y0,y0+th]){ const u=A*X+Cc*Y+E, w=B*X+D*Y+F; bx0=Math.min(bx0,u); by0=Math.min(by0,w); bx1=Math.max(bx1,u); by1=Math.max(by1,w); }
   lip.last=[bx0,by0,bx1-bx0,by1-by0];
-  c.setTransform(A,B,Cc,D,E,F); c.globalAlpha=lip.alpha; c.drawImage(lip.img,sx,sy,tw,th,x0,y0,tw,th);
-  c.globalAlpha=1; c.setTransform(1,0,0,1,0,0);
+  c.setTransform(A,B,Cc,D,E,F);
+  if(!speaking){ fa=fb=lip.cur>=0?lip.cur:lip.closed; ff=0; }
+  drawLipTile(c,fa,lip.alpha,x0,y0);
+  if(fb!==fa&&ff>.05) drawLipTile(c,fb,lip.alpha*ff,x0,y0);   // przejście do następnej prawdziwej klatki
+  lip.cur=fa; c.globalAlpha=1; c.setTransform(1,0,0,1,0,0);
 }
 requestAnimationFrame(lipFrame);
 
