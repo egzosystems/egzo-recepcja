@@ -73,6 +73,14 @@
 - Usunięte podwójne powitanie (licznik cichego powitania przy otwarciu strony).
 - Testy (Chromium, ekran telefonu, procesor 4× wolniejszy): powitanie 0,5 s po stuknięciu, raz, ruch ust od pierwszego słowa, pauzy 0,26–0,32 s; kwestie zmienne bez spóźnień (pauzy 0,26 s), start czatu ok. 5,5 s na wolnym urządzeniu (ok. 3,5 s na komputerze).
 
+## Usta i płynność (wersja 7)
+- Kształty ust z arkusza wizemów (`reference/arkusz-wizemy_2026-10-27.png`, `tools/wizemy_z_arkusza.py`): a, e, i, o, u (dzióbek), m/b/p, f/w (zęby na wardze), l, t/d/n, k/g, s/z/c, sz/ż/cz/dż, r, ch/h, lekko otwarte, zamknięte. Wyrównanie do nosa (0,95–0,98), skala 1,13, obrót −9,5°, jasność i nasycenie dopasowane do skóry, przygaszony połysk. Odrzucone: szeroko otwarte i język (wychodzą poza maskę), Y (na arkuszu narysowane jak dzióbek).
+- Przejścia między kształtami: 3 fazy pośrednie z przepływu optycznego (`tools/morph_ust.py`, 376 kafelków, `lip/usta-morph.webp` 560 KB), przejście 72 ms; nigdy dwa różne kształty w kolejnych klatkach (przy słabym procesorze wstawiana faza pośrednia).
+- Zaokrąglenie warg przed o/u/sz także na t, d, k, s, l, r (ostatnie 50 ms spółgłoski).
+- Rozmycie ściany z logo wypalone w klipach (`tools/maska-rozmycia.png`, gblur σ=3,9) — wcześniej liczone na żywo, co obniżało płynność z 60 do 20 kl/s; ziarno przesuwane transformacją (GPU). Strona: 60 kl/s.
+- Klipy: idle_v2, powitanie_v3, obieg-1_v3, wejscia_v2, poster_v2 (te same klatki, rozmycie wypalone).
+- Arkusz mimiki (`reference/arkusz-mimika_2026-10-27.png`): pojedyncze obrazy — miny i obroty głowy wymagają klipów Veo; na razie tylko jako wzorzec do promptów.
+
 ## Plan
 1. Ujęcia obiegu: 05 odczyt, 06 analiza, 08 segregowanie, 12 odłożenie (prompty w `docs/ujecia.md`).
 2. Poprawki logo na ścianie → nowy kadr bazowy (wtedy klipy generujemy już z niego).

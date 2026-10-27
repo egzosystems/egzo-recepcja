@@ -32,7 +32,7 @@ with sync_playwright() as p:
     }""")
     print('T1 synteza', r['ms'], 'ms dla', r['sec'], 's dźwięku')
     print('T1', ' '.join(f"{a}[{d}]" for a, b0, c, d in r['rows']))
-    bad = [row for row in r['rows'] if row[0] in ('m', 'b', 'p') and row[3] != 'ZAMKNIĘTE']
+    bad = [row for row in r['rows'] if row[0] in ('m', 'b', 'p') and row[3] not in ('mbp','ZAMKNIĘTE')]
     vow = [row for row in r['rows'] if row[0] in ('a',) and row[3] in ('ZAMKNIĘTE',)]
     print('T1 m/b/p niezamknięte:', bad, '| „a” zamknięte:', vow)
 

@@ -3,72 +3,23 @@
  "tileH": 60,
  "offY": 7,
  "shapes": [
-  "rest",
-  "slight",
-  "mid",
-  "open",
-  "wide",
+  "a",
+  "e",
+  "i",
   "o",
-  "o2",
+  "u",
+  "mbp",
+  "fw",
+  "l",
+  "tdn",
+  "kg",
   "s",
-  "teeth"
- ],
- "meta": [
-  {
-   "name": "rest",
-   "frame": 46,
-   "score": 0.774,
-   "scale": 0.93
-  },
-  {
-   "name": "slight",
-   "frame": 62,
-   "score": 0.736,
-   "scale": 0.92
-  },
-  {
-   "name": "mid",
-   "frame": 72,
-   "score": 0.687,
-   "scale": 0.92
-  },
-  {
-   "name": "open",
-   "frame": 54,
-   "score": 0.755,
-   "scale": 0.92
-  },
-  {
-   "name": "wide",
-   "frame": 68,
-   "score": 0.75,
-   "scale": 0.93
-  },
-  {
-   "name": "o",
-   "frame": 58,
-   "score": 0.737,
-   "scale": 0.92
-  },
-  {
-   "name": "o2",
-   "frame": 76,
-   "score": 0.688,
-   "scale": 0.92
-  },
-  {
-   "name": "s",
-   "frame": 50,
-   "score": 0.776,
-   "scale": 0.92
-  },
-  {
-   "name": "teeth",
-   "frame": 80,
-   "score": 0.718,
-   "scale": 0.92
-  }
+  "sz",
+  "r",
+  "ch",
+  "slight",
+  "closed"
  ],
  "roll0": -9.5,
- "maskRX": 27.0
+ "source": "arkusz wizem\u00f3w 2026-10-27"
 }

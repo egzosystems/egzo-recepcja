@@ -130,7 +130,7 @@ input[type=range]{accent-color:var(--gold);width:100%}
   pointer-events:none;white-space:nowrap}
 .plate i{font-style:normal;font-family:var(--f-mono);font-weight:400;font-size:.85em;opacity:.75}
 /* Ziarno filmowe: wspólna faktura dla kadru i wideo */
-.grain{position:absolute;inset:-10%;pointer-events:none;opacity:.07;mix-blend-mode:overlay;background-size:160px 160px}
+.grain{position:absolute;inset:-160px;pointer-events:none;opacity:.07;mix-blend-mode:overlay;background-size:160px 160px}
 @media (prefers-reduced-motion:reduce){.cam img,.cam video{transition:none}.status.busy .dot{animation:none}}
 </style>
 
@@ -143,12 +143,11 @@ input[type=range]{accent-color:var(--gold);width:100%}
   <main style="min-width:0">
     <div class="stage" id="stage">
       <div class="cam" id="cam">
-        <img id="still" alt="Asystentka EGZO przy biurku z tackami na dokumenty" src="media/egzo-poster_2026-10-27.jpg">
-        <video id="vA" poster="media/egzo-poster_2026-10-27.jpg" muted playsinline preload="auto"></video>
+        <img id="still" alt="Asystentka EGZO przy biurku z tackami na dokumenty" src="media/egzo-poster_2026-10-27_v2.jpg">
+        <video id="vA" poster="media/egzo-poster_2026-10-27_v2.jpg" muted playsinline preload="auto"></video>
         <video id="vB" muted playsinline preload="auto"></video>
-        <video id="vC" muted playsinline preload="auto" data-src="media/egzo-wejscia_2026-10-27.mp4"></video>
+        <video id="vC" muted playsinline preload="auto" data-src="media/egzo-wejscia_2026-10-27_v2.mp4"></video>
         <canvas id="lipCanvas" class="lipc" width="1280" height="720" aria-hidden="true"></canvas>
-        <div class="bgblur" id="bgblur"></div>
         <div class="plate" data-t="NOWE" style="left:4.4%;width:12.4%;--p1:#9a7f66;--p2:#86694f">NOWE <i>0</i></div>
         <div class="plate" data-t="W TRAKCIE" style="left:31.3%;width:13.2%;--p1:#8a6f5a;--p2:#7a5f49">W TRAKCIE <i>0</i></div>
         <div class="plate" data-t="DO AKCEPTACJI" style="left:58.5%;width:13.4%;--p1:#8e6c50;--p2:#7d5b40">DO AKCEPTACJI <i>0</i></div>
@@ -204,7 +203,6 @@ input[type=range]{accent-color:var(--gold);width:100%}
       <div class="eyebrow">Fizyka kamery</div>
       <label>Sztywność <input type="range" id="kS" min="5" max="120" value="22"><output id="oS">22</output></label>
       <label>Tłumienie <input type="range" id="kD" min="10" max="100" value="62"><output id="oD">0.62</output></label>
-      <label>Rozmycie tła <input type="range" id="kB" min="0" max="100" value="30"><output id="oB">0.30</output></label>
       <div class="eyebrow" style="margin-top:6px">Głos</div>
       <label>Głos <select id="voiceSel"></select><output></output></label>
       <label>Tempo <input type="range" id="krate" min="70" max="140" value="100"><output id="orate">1.00</output></label>
@@ -243,11 +241,11 @@ const FOCUS={idle:[.5,.5],greet:[.45,.20],listen:[.45,.20],receive:[.40,.45],rea
 STATES.forEach(s=>{[s.fx,s.fy]=FOCUS[s.id]; s.z=1+(s.z-1)*.5;}); byId.idle.z=byId.rest.z=1.025;
 const SAY={"idle": "Czeka na dokumenty", "greet": "Wita", "listen": "Słucha", "receive": "Przyjmuje plik", "read": "Czyta dokument", "analyze": "Analizuje", "browse": "Przegląda", "sort": "Segreguje", "confirm": "Potwierdza", "explain": "Wyjaśnia", "type": "Wprowadza dane", "file": "Odkłada do akceptacji", "return": "Wraca na miejsce", "propose": "Proponuje", "rest": "Czeka na dokumenty"};
 // pierwszy klip z Gemini (Veo): pętla tam-i-z-powrotem, bez szwu
-byId.idle.src='media/egzo-idle_2026-10-27.mp4'; byId.rest.src='media/egzo-idle_2026-10-27.mp4';
+byId.idle.src='media/egzo-idle_2026-10-27_v2.mp4'; byId.rest.src='media/egzo-idle_2026-10-27_v2.mp4';
 // powitanie: klip Veo + domknięcie z drugiego klipu; po nim pętla wchodzi w klatce najbliższej końcowi (11,04 s)
-byId.greet.src='media/egzo-powitanie_2026-10-27_v2.mp4'; byId.greet.exitAt=265/24;
+byId.greet.src='media/egzo-powitanie_2026-10-27_v3.mp4'; byId.greet.exitAt=265/24;
 // przyjęcie pliku: klip Veo (ręka podaje kartkę) + powrót z kartką do pozycji
-byId.receive.src='media/egzo-obieg-1_2026-10-27_v2.mp4'; byId.receive.exitAt=265/24;
+byId.receive.src='media/egzo-obieg-1_2026-10-27_v3.mp4'; byId.receive.exitAt=265/24;
 // obieg 1 (31,7 s): przyjęcie → czytanie (10,4 s) → analiza (21,2 s) → powrót do pozycji
 byId.receive.marks=[[10.4,'Czyta'],[21.2,'Analizuje']]; byId.read.inClip='04'; byId.analyze.inClip='04';
 
@@ -357,7 +355,7 @@ function toggleLock(){cam.locked=!cam.locked;lockBtn.setAttribute('aria-pressed'
 lockBtn.onclick=toggleLock;
 addEventListener('keydown',e=>{if(e.key==='l'||e.key==='L'){if(e.target.tagName!=='INPUT')toggleLock();}});
 const knob=(id,o,fn,fmt)=>{const el=document.getElementById(id);el.oninput=()=>{fn(+el.value);document.getElementById(o).textContent=fmt(+el.value)};};
-knob('kS','oS',v=>cam.k=v,v=>v); knob('kD','oD',v=>cam.d=v/100,v=>(v/100).toFixed(2)); knob('kB','oB',v=>document.getElementById('bgblur').style.setProperty('--blur',(v/100)+'cqw'),v=>(v/100).toFixed(2)); knob('kM','oM',v=>cam.follow=v/100,v=>(v/100).toFixed(2));
+knob('kS','oS',v=>cam.k=v,v=>v); knob('kD','oD',v=>cam.d=v/100,v=>(v/100).toFixed(2)); knob('kM','oM',v=>cam.follow=v/100,v=>(v/100).toFixed(2));
 
 /* ---------- Lista ujęć ---------- */
 const clipsEl=document.getElementById('clips');
@@ -701,12 +699,15 @@ function spokenPL(t){
 }
 
 /* ---------- Synchronizacja ust: czasy liter z modelu + polska wymowa ---------- */
-const lip={img:null,meta:null,track:null,segs:[],alpha:0,shA:0,shB:0,mix:1,last:null,canvas:document.getElementById('lipCanvas')};
+const lip={img:null,meta:null,mm:null,track:null,segs:[],alpha:0,from:0,to:0,tStart:0,last:null,canvas:document.getElementById('lipCanvas')};
 lip.ctx=lip.canvas.getContext('2d');
 (async()=>{ try{
-  const [meta,track]=await Promise.all([fetch('lip/usta-atlas.json').then(r=>r.json()),fetch('lip/usta-tor.json').then(r=>r.json())]);
-  const img=new Image(); img.src='lip/usta-atlas.png'; await img.decode();
-  lip.meta=meta; lip.track=track.idle; lip.img=img; lip.SH=Object.fromEntries(meta.shapes.map((n,i)=>[n,i]));
+  const [meta,track,mm]=await Promise.all([fetch('lip/usta-atlas.json').then(r=>r.json()),fetch('lip/usta-tor.json').then(r=>r.json()),fetch('lip/usta-morph.json').then(r=>r.json())]);
+  const img=new Image(); img.src='lip/usta-morph.webp'; await img.decode();
+  lip.meta=meta; lip.mm=mm; lip.track=track.idle; lip.img=img; lip.SH=Object.fromEntries(meta.shapes.map((n,i)=>[n,i]));
+  lip.CLOSED_I=mm.shapes.indexOf('closed'); lip.from=lip.to=lip.lastTile=lip.CLOSED_I; lip.NB=mm.shapes.length;
+  // odwrotna mapa faz: kafelek → [kształt bliższy]
+  lip.near={}; for(const [k,ids] of Object.entries(mm.pair)){ const [a,b]=k.split(',').map(Number); lip.near[ids[0]]=a; lip.near[ids[1]]=b; lip.near[ids[2]]=b; }
 }catch(e){ lip.img=null; } })();
 const CLOSED=255;   // usta zamknięte = prawdziwe usta z wideo (nakładka znika)
 const VOWELS='aąeęioóuy';
@@ -727,14 +728,16 @@ function phonesFromChars(chars,dur){
   }
   return units;
 }
+// głoska → kształt ust (wizemy z arkusza); SIL = przerwa
 function visClass(p){
   if(p===' '||/^[.,!?;:…"”»-]$/.test(p)) return 'SIL';
   if(p==='a') return 'A'; if(p==='e'||p==='ę') return 'E'; if(p==='i'||p==='j') return 'I'; if(p==='y') return 'Y';
-  if(p==='o'||p==='ą') return 'O'; if(p==='u'||p==='ó') return 'U'; if(p==='ł') return 'U';
+  if(p==='o'||p==='ą') return 'O'; if(p==='u'||p==='ó'||p==='ł') return 'U';
   if('mbp'.includes(p)) return 'MBP'; if(p==='f'||p==='w') return 'FV';
   if(['sz','cz','rz','ż','dż'].includes(p)) return 'SH';
   if(['s','z','c','dz','ś','ź','ć','dź'].includes(p)) return 'S';
-  return 'N';  // t d n ń l r k g ch h — kształt warg od sąsiednich samogłosek
+  if(p==='l') return 'L'; if(p==='r') return 'R'; if(p==='k'||p==='g') return 'KG'; if(p==='ch'||p==='h') return 'CH';
+  return 'TDN';   // t d n ń i reszta
 }
 function lipTimeline(m,text,offset,total,pcm){
   const step=.01, n=Math.max(1,Math.ceil(total/step)), out=new Uint8Array(n).fill(CLOSED);
@@ -746,8 +749,7 @@ function lipTimeline(m,text,offset,total,pcm){
   const fr=m.hop/sr, units=phonesFromChars(m.chars,m.dur);
   let t=-offset; const seg=[];
   for(const u of units){ const t0=t, t1=t+u.d*fr; t=t1; seg.push({v:visClass(u.p),p:u.p,t0,t1}); }
-  const vowelShape=(v,L)=>v==='A'?(L>.5?'open':'mid'):v==='E'?(L>.5?'wide':'slight'):v==='I'?(L>.55?'teeth':'s'):v==='Y'?(L>.5?'wide':'slight'):v==='O'?'o':v==='U'?'mid':'slight';
-  const nearVowel=(k)=>{ for(let d=1;d<4;d++){ const a=seg[k+d], b=seg[k-d]; if(a&&'AEIYOU'.includes(a.v)&&a.v.length===1) return a.v; if(b&&'AEIYOU'.includes(b.v)&&b.v.length===1) return b.v; } return 'E'; };
+  const ROUND={O:'o',U:'u',SH:'sz'};
   for(let k=0;k<seg.length;k++){
     const g=seg[k]; let a=Math.max(0,Math.floor(g.t0/step)), b=Math.min(n,Math.ceil(g.t1/step));
     if(b<=a) continue;
@@ -757,21 +759,29 @@ function lipTimeline(m,text,offset,total,pcm){
       case 'SIL': {
         const long=(g.t1-g.t0)>(/[.,!?;:…]/.test(g.p)?.07:.16);
         if(long){ sh=CLOSED; break; }
-        // krótka przerwa między słowami: wargi zostają lekko rozchylone (chyba że obok jest m/b/p)
+        // krótka przerwa między słowami: wargi lekko rozchylone (przy m/b/p — złączone)
         const nb=[seg[k-1],seg[k+1]];
-        sh=nb.some(x=>x&&x.v==='MBP')?CLOSED:'slight'; break; }
-      case 'MBP': sh=CLOSED; break;
-      case 'FV': sh='slight'; break;
-      case 'SH': sh='o2'; break;
+        sh=nb.some(x=>x&&x.v==='MBP')?'mbp':'slight'; break; }
+      case 'A': sh=L>.4?'a':'tdn'; break;
+      case 'E': sh=L>.35?'e':'slight'; break;
+      case 'Y': sh=L>.35?'e':'slight'; break;
+      case 'I': sh='i'; break;
+      case 'O': sh='o'; break;
+      case 'U': sh='u'; break;
+      case 'MBP': sh='mbp'; break;
+      case 'FV': sh='fw'; break;
+      case 'SH': sh='sz'; break;
       case 'S': sh='s'; break;
-      case 'N': { const v=nearVowel(k); sh=v==='O'||v==='U'?'mid':v==='A'?'mid':'slight'; break; }
-      default: sh=vowelShape(g.v,L);
+      case 'L': sh='l'; break;
+      case 'R': sh='r'; break;
+      case 'KG': sh='kg'; break;
+      case 'CH': sh='ch'; break;
+      default: sh='tdn';
     }
-    if(sh===null) continue;
-    const id=sh===CLOSED?CLOSED:(SH[sh]??1);
+    const id=sh===CLOSED?CLOSED:(SH[sh]??SH.slight??1);
     for(let i=a;i<b;i++) out[i]=id;
-    // zaokrąglenie warg zaczyna się wcześniej (antycypacja) — tylko w miejsce głosek neutralnych
-    if(g.v==='O'||g.v==='U'||g.v==='SH'){ for(let i=Math.max(0,a-5);i<a;i++){ const pv=seg.find(s=>s.t0<=i*step&&s.t1>i*step); if(pv&&(pv.v==='N'||pv.v==='S')) out[i]=id; } }
+    // zaokrąglenie warg zaczyna się wcześniej (antycypacja): spółgłoska przed o/u/sz bierze kształt warg (ostatnie 50 ms)
+    if(ROUND[g.v]&&k>0){ const pv=seg[k-1]; if(pv&&['TDN','KG','S','L','R','CH'].includes(pv.v)){ for(let i=Math.max(Math.floor(pv.t0/step),a-5);i<a;i++) if(i>=0) out[i]=id; } }
   }
   // wygładzenie: kształty krótsze niż 30 ms między dwoma otwartymi kształtami przejmują sąsiada;
   // otwarcia przy domknięciu (np. „a” w „mama”) zostają — to najbardziej widoczny ruch ust
@@ -788,36 +798,49 @@ function lipFallback(pcm,sr,text,n){   // głos bez czasów liter (np. Gosia): g
   const SH=lip.SH||{}, hop=Math.round(sr*.01), env=new Float32Array(n), out=new Uint8Array(n).fill(CLOSED);
   for(let i=0;i<n;i++){ let a=0; const s=i*hop, e=Math.min(pcm.length,s+2*hop); for(let k=s;k<e;k++) a+=pcm[k]*pcm[k]; env[i]=Math.sqrt(a/Math.max(1,e-s)); }
   const srt=Array.from(env).sort((a,b)=>a-b), p95=srt[Math.floor(.95*(n-1))]||1;
-  for(let i=0;i<n;i++){ const L=env[i]/p95; out[i]=L<.12?CLOSED:SH[L>.55?'open':L>.3?'mid':'slight']; }
+  for(let i=0;i<n;i++){ const L=env[i]/p95; out[i]=L<.12?CLOSED:SH[L>.55?'a':L>.3?'tdn':'slight']; }
   return out;
 }
 function lipShapeAt(t){
   for(const s of lip.segs){ if(t>=s.t0&&t<s.t0+s.dur){ const i=Math.floor((t-s.t0)/.01); return s.tl[Math.min(s.tl.length-1,i)]; } }
   return null;   // poza mową
 }
-function lipFrame(){
+// kafelek dla etapu przejścia a→b (0..1): kształt, 3 fazy z przepływu optycznego, kształt
+function morphTile(a,b,p){
+  if(a===b||p>=.875) return b; if(p<.125) return a;
+  const k=a<b?`${a},${b}`:`${b},${a}`, ids=lip.mm.pair[k]; if(!ids) return p<.5?a:b;
+  const step=p<.375?0:p<.625?1:2; return a<b?ids[step]:ids[2-step];
+}
+const MORPH_MS=72;
+function lipFrame(now){
   requestAnimationFrame(lipFrame);
   const c=lip.ctx;
   if(!lip.img) return;
   const v=front, onIdle=v.style.opacity==='1'&&byId.idle.src&&v.src.endsWith(byId.idle.src);
-  let target=0, shape=lip.shB;
+  let speaking=false, shape=lip.CLOSED_I;
   if(lip.segs.length&&onIdle&&neural.ctx){
     const sh=lipShapeAt(neural.ctx.currentTime+.04);   // obraz wyprzedza dźwięk o 40 ms
-    if(sh!==null&&sh!==CLOSED){ target=1; shape=sh; }
+    if(sh!==null){ speaking=true; shape=sh===CLOSED?lip.CLOSED_I:sh; }
+    else if(lip.segs.some(s=>neural.ctx.currentTime<s.t0+s.dur+.25)){ speaking=true; }   // krótka pauza między zdaniami: usta domknięte nakładką
   }
   const fi=Math.min(lip.track.length-1,Math.max(0,Math.round(v.currentTime*24))), tr=lip.track[fi];
-  if(!tr||tr[3]<.5) target=0;
-  // domknięcie (m/b/p, pauza) szybko, otwieranie trochę łagodniej
-  lip.alpha+=(target-lip.alpha)*(target>lip.alpha?.55:.5);
-  if(shape!==lip.shB){ lip.shA=lip.shB; lip.shB=shape; lip.mix=0; }
-  lip.mix=Math.min(1,lip.mix+.55);
+  if(!tr||tr[3]<.5) speaking=false;
+  // zmiana celu: nowe przejście startuje z kształtu, który właśnie widać
+  const shown=lip.lastTile<lip.NB?lip.lastTile:(lip.near[lip.lastTile]??lip.to);
+  if(shape!==lip.to){ lip.from=shown; lip.to=shape; lip.tStart=now; }
+  let tile=morphTile(lip.from,lip.to,Math.min(1,(now-lip.tStart)/MORPH_MS));
+  // nigdy dwa różne kształty w kolejnych klatkach (ważne przy słabym procesorze): wstawiamy fazę pośrednią
+  if(lip.lastTile<lip.NB&&tile<lip.NB&&tile!==lip.lastTile&&lip.alpha>.02) tile=morphTile(lip.lastTile,tile,.5);
+  lip.lastTile=tile;
+  // wejście i wyjście z mowy: nakładka z zamkniętymi ustami jest prawie identyczna z wideo, więc znika niezauważalnie
+  lip.alpha+=((speaking?1:0)-lip.alpha)*(speaking?.5:.18);
+  if(!speaking&&lip.to!==lip.CLOSED_I){ lip.from=shown; lip.to=lip.CLOSED_I; lip.tStart=now; }
   if(lip.last){ c.clearRect(lip.last[0]-2,lip.last[1]-2,lip.last[2]+4,lip.last[3]+4); lip.last=null; }
   if(lip.alpha<.02||!tr) return;
-  const m=lip.meta, s=tr[2], tw=m.tileW, th=m.tileH, dw=tw*s, dh=th*s, dx=tr[0]-dw/2, dy=tr[1]+m.offY*s-dh/2;
+  const mm=lip.mm, s=tr[2], tw=mm.tileW, th=mm.tileH, dw=tw*s, dh=th*s, dx=tr[0]-dw/2, dy=tr[1]+mm.offY*s-dh/2;
+  const sx=(tile%mm.cols)*tw, sy=Math.floor(tile/mm.cols)*th;
   lip.last=[dx,dy,dw,dh];
-  if(lip.mix<1){ c.globalAlpha=lip.alpha*(1-lip.mix); c.drawImage(lip.img,lip.shA*tw,0,tw,th,dx,dy,dw,dh); }
-  c.globalAlpha=lip.alpha*(lip.mix<1?lip.mix:1); c.drawImage(lip.img,lip.shB*tw,0,tw,th,dx,dy,dw,dh);
-  c.globalAlpha=1;
+  c.globalAlpha=lip.alpha; c.drawImage(lip.img,sx,sy,tw,th,dx,dy,dw,dh); c.globalAlpha=1;
 }
 requestAnimationFrame(lipFrame);
 
@@ -1022,7 +1045,7 @@ document.getElementById('testBack').onclick=()=>{ wt.last=Date.now()-35*60000; w
  for(let i=0;i<im.data.length;i+=4){const v=Math.random()*255|0;im.data[i]=im.data[i+1]=im.data[i+2]=v;im.data[i+3]=255;}
  x.putImageData(im,0,0);const g=document.getElementById('grain');g.style.backgroundImage=`url(${c.toDataURL()})`;
  if(matchMedia('(prefers-reduced-motion: reduce)').matches)return;
- setInterval(()=>{g.style.backgroundPosition=`${Math.random()*160|0}px ${Math.random()*160|0}px`},42);})();
+ g.style.willChange='transform'; setInterval(()=>{g.style.transform=`translate3d(${(Math.random()*160|0)-80}px,${(Math.random()*160|0)-80}px,0)`},42);})();
 vC.src=vC.dataset.src; vC.addEventListener('loadeddata',()=>{vC.dataset.ok='1';},{once:true});
 refresh(); setState(byId.idle);
 setTimeout(()=>{if(!busy.v&&cur.id==='idle')greetWithVoice();},1200);
