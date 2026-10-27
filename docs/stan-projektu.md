@@ -95,6 +95,14 @@
 - Klatki mówienia z powitania odrzucone: głowa przechylona o 20–25° i szeroki uśmiech — po wklejeniu zmieniają kształt dolnej części twarzy.
 - Ograniczenie: pętla spoczynkowa ma tylko lekkie rozchylenia warg (bez szeroko otwartych ust i zębów) → mowa delikatna. Pełna artykulacja wymaga klipu „mówi w pozie spoczynkowej” z Veo — wystarczy go przepuścić przez `tools/usta_z_klatek.py` razem z pętlą.
 
+## Biblioteka mowy i stały kąt ust (wersja 10)
+- Przyczyna przekrzywiania: tor głowy (gdzie rysować) i wyrównanie klatek biblioteki (co rysować) liczone były RÓŻNYMI metodami (okolica ust vs. nos–policzki). Głowa jest też lekko odwrócona w bok, więc obie metody dawały inny kąt — różnica była widoczna jako krzywe usta.
+- Teraz jedna metoda dla obu: ECC (afinicznie) na okolicy ust i brody, klatka po klatce, lekko wygładzona. Błędy pomiaru się znoszą; sprawdzone na klatkach 0–460 pętli i w przeglądarce. Kąt głowy 0…−9,4°, pewność min 0,89; biblioteka 141 prawdziwych klatek (124 ciągi).
+- `mowa/egzo-mowa.js` — biblioteka EGZO MOWA: `powiedz`, `przygotuj`, `strumien`, `stop`, `zajeta`, zdarzenia `mowi`/`stan`/`postep`, tory ust dla wielu póz. Opis: `docs/mowa.md`.
+- `tools/zbuduj_mowe.py` — jedno polecenie buduje tor i bibliotekę klatek (oraz tory kolejnych póz: `NAZWA=klip.mp4`); zastępuje `tor_ust_ecc.py` i `usta_z_klatek.py`.
+- `tools/zbuduj_strone.py` — wbudowuje bibliotekę w stronę artefaktu i tworzy `index.html` repo.
+- `tests/test_mowa.py` — 10 sprawdzeń przez interfejs biblioteki (m/b/p zamknięte, „a” otwarte, pauzy 0,26 s, bez spóźnień, strumień, zdarzenia, przygotowanie, stop).
+
 ## Plan
 1. Ujęcia obiegu: 05 odczyt, 06 analiza, 08 segregowanie, 12 odłożenie (prompty w `docs/ujecia.md`).
 2. Poprawki logo na ścianie → nowy kadr bazowy (wtedy klipy generujemy już z niego).

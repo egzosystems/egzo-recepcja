@@ -20,8 +20,8 @@ with sync_playwright() as p:
         if pg.evaluate("()=>eng.stats.length>0") and done(pg): break
     print('MAIL', json.dumps(pg.evaluate("()=>eng.stats")), '| od zdarzenia do końca', round(time.time()-t0,1),'s')
     # 2) odpowiedź czatu dopływająca kawałkami (3 zdania)
-    pg.evaluate("""()=>{ eng.stats=[]; const sp=speechStream(); const full='Jasne, już sprawdzam. Masz dziś jedno zamówienie, które czeka na twoją akceptację. Czy mam je od razu otworzyć?';
-      let i=0; const iv=setInterval(()=>{ i=Math.min(full.length,i+14); sp.push(full.slice(0,i)); if(i>=full.length){ clearInterval(iv); sp.end(full); } },150); }""")
+    pg.evaluate("""()=>{ eng.stats=[]; const sp=mowa.strumien(); const full='Jasne, już sprawdzam. Masz dziś jedno zamówienie, które czeka na twoją akceptację. Czy mam je od razu otworzyć?';
+      let i=0; const iv=setInterval(()=>{ i=Math.min(full.length,i+14); sp.dodaj(full.slice(0,i)); if(i>=full.length){ clearInterval(iv); sp.zakoncz(full); } },150); }""")
     t0=time.time(); first=None
     while time.time()-t0<60:
         pg.wait_for_timeout(200)
