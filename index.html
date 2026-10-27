@@ -749,7 +749,8 @@ function lipTimeline(m,text,offset,total,pcm){
   const fr=m.hop/sr, units=phonesFromChars(m.chars,m.dur);
   let t=-offset; const seg=[];
   for(const u of units){ const t0=t, t1=t+u.d*fr; t=t1; seg.push({v:visClass(u.p),p:u.p,t0,t1}); }
-  const ROUND={O:'o',U:'u',SH:'sz'};
+  const ROUND={O:'o',U:'u',SH:'o2'};
+  const nearVowel=(k)=>{ for(let d=1;d<4;d++){ for(const x of [seg[k+d],seg[k-d]]) if(x&&'AEIYOU'.includes(x.v)&&x.v.length===1) return x.v; } return 'E'; };
   for(let k=0;k<seg.length;k++){
     const g=seg[k]; let a=Math.max(0,Math.floor(g.t0/step)), b=Math.min(n,Math.ceil(g.t1/step));
     if(b<=a) continue;
@@ -759,24 +760,19 @@ function lipTimeline(m,text,offset,total,pcm){
       case 'SIL': {
         const long=(g.t1-g.t0)>(/[.,!?;:…]/.test(g.p)?.07:.16);
         if(long){ sh=CLOSED; break; }
-        // krótka przerwa między słowami: wargi lekko rozchylone (przy m/b/p — złączone)
         const nb=[seg[k-1],seg[k+1]];
-        sh=nb.some(x=>x&&x.v==='MBP')?'mbp':'slight'; break; }
-      case 'A': sh=L>.4?'a':'tdn'; break;
-      case 'E': sh=L>.35?'e':'slight'; break;
-      case 'Y': sh=L>.35?'e':'slight'; break;
-      case 'I': sh='i'; break;
+        sh=nb.some(x=>x&&x.v==='MBP')?CLOSED:'slight'; break; }
+      case 'A': sh=L>.45?'open':'mid'; break;
+      case 'E': case 'Y': sh=L>.45?'wide':'slight'; break;
+      case 'I': sh=L>.5?'teeth':'s'; break;
       case 'O': sh='o'; break;
       case 'U': sh='u'; break;
-      case 'MBP': sh='mbp'; break;
-      case 'FV': sh='fw'; break;
-      case 'SH': sh='sz'; break;
+      case 'MBP': sh=CLOSED; break;
+      case 'FV': sh='slight'; break;
+      case 'SH': sh='o2'; break;
       case 'S': sh='s'; break;
-      case 'L': sh='l'; break;
-      case 'R': sh='r'; break;
-      case 'KG': sh='kg'; break;
-      case 'CH': sh='ch'; break;
-      default: sh='tdn';
+      case 'KG': case 'CH': sh='mid'; break;
+      default: { const v=nearVowel(k); sh=(v==='O'||v==='U'||v==='A')?'mid':'slight'; }   // t d n l r
     }
     const id=sh===CLOSED?CLOSED:(SH[sh]??SH.slight??1);
     for(let i=a;i<b;i++) out[i]=id;
@@ -824,7 +820,7 @@ function lipFrame(now){
     else if(lip.segs.some(s=>neural.ctx.currentTime<s.t0+s.dur+.25)){ speaking=true; }   // krótka pauza między zdaniami: usta domknięte nakładką
   }
   const fi=Math.min(lip.track.length-1,Math.max(0,Math.round(v.currentTime*24))), tr=lip.track[fi];
-  if(!tr||tr[3]<.5) speaking=false;
+  if(!tr||tr[3]<.6) speaking=false;
   // zmiana celu: nowe przejście startuje z kształtu, który właśnie widać
   const shown=lip.lastTile<lip.NB?lip.lastTile:(lip.near[lip.lastTile]??lip.to);
   if(shape!==lip.to){ lip.from=shown; lip.to=shape; lip.tStart=now; }
@@ -835,12 +831,17 @@ function lipFrame(now){
   // wejście i wyjście z mowy: nakładka z zamkniętymi ustami jest prawie identyczna z wideo, więc znika niezauważalnie
   lip.alpha+=((speaking?1:0)-lip.alpha)*(speaking?.5:.18);
   if(!speaking&&lip.to!==lip.CLOSED_I){ lip.from=shown; lip.to=lip.CLOSED_I; lip.tStart=now; }
-  if(lip.last){ c.clearRect(lip.last[0]-2,lip.last[1]-2,lip.last[2]+4,lip.last[3]+4); lip.last=null; }
+  if(lip.last){ c.setTransform(1,0,0,1,0,0); c.clearRect(lip.last[0]-3,lip.last[1]-3,lip.last[2]+6,lip.last[3]+6); lip.last=null; }
   if(lip.alpha<.02||!tr) return;
-  const mm=lip.mm, s=tr[2], tw=mm.tileW, th=mm.tileH, dw=tw*s, dh=th*s, dx=tr[0]-dw/2, dy=tr[1]+mm.offY*s-dh/2;
-  const sx=(tile%mm.cols)*tw, sy=Math.floor(tile/mm.cols)*th;
-  lip.last=[dx,dy,dw,dh];
-  c.globalAlpha=lip.alpha; c.drawImage(lip.img,sx,sy,tw,th,dx,dy,dw,dh); c.globalAlpha=1;
+  const mm=lip.mm, tw=mm.tileW, th=mm.tileH, sx=(tile%mm.cols)*tw, sy=Math.floor(tile/mm.cols)*th;
+  // kafelek w układzie kadru bazowego, przekształcony do bieżącej klatki (położenie, skala, obrót głowy)
+  const x0=582-tw/2, y0=227+mm.offY-th/2;
+  const T=tr[5]||[tr[2],0,0,tr[2],tr[0]-582*tr[2],tr[1]-227*tr[2]];
+  const [A,B,Cc,D,E,F]=T, xs=[x0,x0+tw], ys=[y0,y0+th]; let bx0=1e9,by0=1e9,bx1=-1e9,by1=-1e9;
+  for(const X of xs) for(const Y of ys){ const u=A*X+Cc*Y+E, v=B*X+D*Y+F; bx0=Math.min(bx0,u); by0=Math.min(by0,v); bx1=Math.max(bx1,u); by1=Math.max(by1,v); }
+  lip.last=[bx0,by0,bx1-bx0,by1-by0];
+  c.setTransform(A,B,Cc,D,E,F); c.globalAlpha=lip.alpha; c.drawImage(lip.img,sx,sy,tw,th,x0,y0,tw,th);
+  c.globalAlpha=1; c.setTransform(1,0,0,1,0,0);
 }
 requestAnimationFrame(lipFrame);
 

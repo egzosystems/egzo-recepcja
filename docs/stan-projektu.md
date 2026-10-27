@@ -81,6 +81,12 @@
 - Klipy: idle_v2, powitanie_v3, obieg-1_v3, wejscia_v2, poster_v2 (te same klatki, rozmycie wypalone).
 - Arkusz mimiki (`reference/arkusz-mimika_2026-10-27.png`): pojedyncze obrazy — miny i obroty głowy wymagają klipów Veo; na razie tylko jako wzorzec do promptów.
 
+## Usta bez deformacji (wersja 8)
+- Przyczyna 1: w pętli spoczynkowej głowa jest obrócona o 0…−9,5° względem kadru bazowego, a nakładka miała stały przechył — pochylone usta na poziomej twarzy. Teraz tor ust liczony metodą ECC (afinicznie, pewność 0,89–0,94) dla każdej klatki pętli (`tools/tor_ust_ecc.py`), nakładka rysowana z pełnym przekształceniem (położenie, skala, obrót).
+- Przyczyna 2: kształty z arkusza to usta innej twarzy (pełniejsze, inaczej pochylone) — zamiast nich jej własne usta z klipu powitania + dzióbek „u” uzyskany jako ruch jej warg (`tools/usta_ruch_z_arkusza.py`); zamknięte = jej usta z kadru.
+- Przyczyna 3: kształty z klipu powitania to szeroki uśmiech — stonowane do 60% ruchu od zamkniętych ust (o 75%, o2 70%, u 85%) (`tools/stonuj_usta.py`).
+- Arkusz wizemów zostaje jako wzorzec przypisania głosek; przeniesienie ruchu dla pozostałych kształtów dawało artefakty na krawędziach — odrzucone.
+
 ## Plan
 1. Ujęcia obiegu: 05 odczyt, 06 analiza, 08 segregowanie, 12 odłożenie (prompty w `docs/ujecia.md`).
 2. Poprawki logo na ścianie → nowy kadr bazowy (wtedy klipy generujemy już z niego).
