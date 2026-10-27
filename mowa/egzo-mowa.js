@@ -266,6 +266,8 @@ function utworz(opt){
      obrazowi na ekranie — płaskie przekształcenie nie odda obrotu głowy w przestrzeni, więc usta z innej
      pozy byłyby krzywe (do 10°); przy bliskiej pozie błąd kąta < 1°. */
   const POSE_FREE=6, POSE_W=.03, POSE_MAX=16, K_CAND=64;
+  // żuchwa: broda z wideo opuszcza się razem z otwieraniem ust (różnica otwarcia nakładka − wideo)
+  const JAW_PX=5, JAW_Y0=227, JAW_CHIN=291, JAW_K=.35;
   const lip={img:null,lib:null,tory:{},segs:[],alpha:0,cur:-1,last:null,canvas:o.canvas,ctx:o.canvas?o.canvas.getContext('2d'):null,ready:null,fixes:0,frame:-1,diag:{n:0,off:0,maxOff:0}};
   lip.ready=(async()=>{ try{
     const [libj,track]=await Promise.all([fetch(o.bazaUst+'usta-klatki.json').then(r=>r.json()),fetch(o.bazaUst+'usta-tor.json').then(r=>r.json())]);
@@ -279,6 +281,17 @@ function utworz(opt){
     for(let e=0;e<nR;e++){ lip.etile[e]=e; lip.open[e]=fr[e].open; lip.next[e]=libj.next[e]; lip.real[e]=fr[e].kopia?0:1; }
     V.forEach((v,i)=>{ const e=nR+i; lip.etile[e]=v[0]; lip.emat[e]=v.slice(2,8); lip.open[e]=fr[v[0]].open; lip.next[e]=v[8]>=0?nR+v[8]:-1; });
     { let mi=0; for(let e=1;e<nR;e++) if(lip.real[e]&&lip.open[e]<lip.open[mi]) mi=e; lip.closed=mi; }
+    // otwarcie ust w samym wideo (z najbliższej klatki biblioteki z tej samej klatki pętli)
+    if(lip.tory.idle){ const n=lip.tory.idle.length, vo=new Float32Array(n).fill(-1);
+      fr.forEach((f,e)=>{ if(!f.kopia&&f.i<n) vo[f.i]=f.open; });
+      for(let j=0;j<n;j++) if(vo[j]<0){ let a=j,b=j; while(a>0&&vo[a]<0) a--; while(b<n-1&&vo[b]<0) b++; vo[j]=vo[a]>=0?vo[a]:Math.max(0,vo[b]); }
+      lip.vopen=vo; }
+    // maska warstwy żuchwy (w układzie kadru bazowego): od linii ust w dół do szyi, miękkie brzegi
+    { const X=500,Y=JAW_Y0-6,W=164,H=118, m=document.createElement('canvas'); m.width=W; m.height=H; const x=m.getContext('2d'), id=x.createImageData(W,H);
+      for(let yy=0;yy<H;yy++) for(let xx=0;xx<W;xx++){ const rx=X+xx, ry=Y+yy;
+        const top=Math.min(1,Math.max(0,(ry-(JAW_Y0-2))/10)), bot=Math.min(1,Math.max(0,(JAW_CHIN+30-ry)/22)), side=Math.min(1,Math.max(0,(74-Math.abs(rx-582))/16));
+        id.data[(yy*W+xx)*4+3]=Math.round(255*top*bot*side); }
+      x.putImageData(id,0,0); lip.jawMask={c:m,X,Y,W,H}; lip.jawCanvas=document.createElement('canvas'); lip.jawCanvas.width=240; lip.jawCanvas.height=200; lip.jaw=0; }
     const PL=track.poza&&track.poza.idle, PT=libj.poza;
     if(PL&&PT&&PT.length===nR){
       // odległość pozy: każda klatka ust × każda klatka pętli; dla każdej klatki pętli K najbliższych klatek ust
@@ -353,6 +366,25 @@ function utworz(opt){
     if(m){ c.translate(x0,y0); c.transform(m[0],m[1],m[2],m[3],m[4],m[5]); c.drawImage(lip.img,sx,sy,tw,th,0,0,tw,th); }   // przeniesione usta: korekta do tej pozy
     else c.drawImage(lip.img,sx,sy,tw,th,x0,y0,tw,th);
   }
+  // broda z wideo rozciągnięta w dół od linii ust (y' = y + s·(y − linia ust)), w układzie twarzy
+  function drawJaw(c,v,T,dy){
+    const J=lip.jawMask, jc=lip.jawCanvas, x=jc.getContext('2d'), s=dy/(JAW_CHIN-JAW_Y0);
+    const [A,B,C,D,E,F]=T, det=A*D-B*C, iA=D/det, iB=-B/det, iC=-C/det, iD=A/det, iE=(C*F-D*E)/det, iF=(B*E-A*F)/det;
+    // M = T · S · T⁻¹ (S: rozciągnięcie w pionie względem linii ust)
+    const S=[1,0,0,1+s,0,-s*JAW_Y0];
+    const mul=(p,q)=>[p[0]*q[0]+p[2]*q[1],p[1]*q[0]+p[3]*q[1],p[0]*q[2]+p[2]*q[3],p[1]*q[2]+p[3]*q[3],p[0]*q[4]+p[2]*q[5]+p[4],p[1]*q[4]+p[3]*q[5]+p[5]];
+    const M=mul(mul([A,B,C,D,E,F],S),[iA,iB,iC,iD,iE,iF]);
+    // obszar na ekranie (ramka maski po przekształceniu)
+    let bx0=1e9,by0=1e9,bx1=-1e9,by1=-1e9;
+    for(const X of [J.X,J.X+J.W]) for(const Y of [J.Y,J.Y+J.H]){ const u=A*X+C*Y+E, q=B*X+D*Y+F; bx0=Math.min(bx0,u); by0=Math.min(by0,q); bx1=Math.max(bx1,u); by1=Math.max(by1,q); }
+    bx0=Math.floor(bx0)-2; by0=Math.floor(by0)-2; const bw=Math.min(jc.width,Math.ceil(bx1-bx0)+4), bh=Math.min(jc.height,Math.ceil(by1-by0)+4);
+    x.globalCompositeOperation='copy'; x.setTransform(M[0],M[1],M[2],M[3],M[4]-bx0,M[5]-by0);
+    const sx=Math.max(0,bx0-8), sy=Math.max(0,by0-12); x.drawImage(v,sx,sy,bw+16,bh+24,sx,sy,bw+16,bh+24);
+    x.globalCompositeOperation='destination-in'; x.setTransform(A,B,C,D,E-bx0,F-by0); x.drawImage(J.c,J.X,J.Y);
+    x.globalCompositeOperation='source-over'; x.setTransform(1,0,0,1,0,0);
+    c.setTransform(1,0,0,1,0,0); c.globalAlpha=1; c.drawImage(jc,0,0,bw,bh,bx0,by0,bw,bh);
+    lip.jawLast=[bx0,by0,bw,bh];
+  }
   function lipFrame(){
     requestAnimationFrame(lipFrame);
     const c=lip.ctx;
@@ -373,6 +405,7 @@ function utworz(opt){
     if(!tr||tr[3]<.6) speaking=false;
     lip.alpha+=((speaking?1:0)-lip.alpha)*(speaking?.4:.15);
     if(lip.last){ c.setTransform(1,0,0,1,0,0); c.clearRect(lip.last[0]-14,lip.last[1]-14,lip.last[2]+28,lip.last[3]+28); lip.last=null; }
+    if(lip.jawLast){ c.setTransform(1,0,0,1,0,0); c.clearRect(lip.jawLast[0]-2,lip.jawLast[1]-2,lip.jawLast[2]+4,lip.jawLast[3]+4); lip.jawLast=null; }
     if(lip.alpha<.02||!tr) return;
     const L=lip.lib, x0=L.x0, y0=L.y0, tw=L.tileW, th=L.tileH;
     const [A,B,Cc,D,E,F]=tr[5];
@@ -385,6 +418,11 @@ function utworz(opt){
       if(speaking&&pj<0){ fa=fb=closedAt(fi); ff=0; }   // krótka pauza między zdaniami: zamknięte usta w tej samej pozie
       else { fa=poseFix(fa,fi); fb=poseFix(fb,fi); }
     }
+    // żuchwa: docelowe opuszczenie brody = różnica otwarcia (nakładka − wideo), z bezwładnością mięśni
+    const oNow=lip.open[fa]*(1-ff)+(fb>=0?lip.open[fb]:lip.open[fa])*ff, vo=lip.vopen&&w.klip==='idle'?lip.vopen[fi]:0;
+    const jawT=(speaking||lip.alpha>.02)?Math.max(-1,Math.min(1,oNow-vo))*JAW_PX*lip.alpha:0;
+    lip.jaw+=(jawT-lip.jaw)*JAW_K;
+    if(Math.abs(lip.jaw)>.15) drawJaw(c,v,tr[5],lip.jaw);
     drawLipTile(c,fa,lip.alpha,x0,y0,tr[5]);
     if(fb!==fa&&ff>.05) drawLipTile(c,fb,lip.alpha*ff,x0,y0,tr[5]);   // przejście do następnej prawdziwej klatki
     lip.cur=fa; c.globalAlpha=1; c.setTransform(1,0,0,1,0,0);
@@ -430,7 +468,7 @@ function utworz(opt){
     glosySystemowe,
     gotoweUsta:()=>lip.ready,
     // dla testów i diagnostyki
-    wnetrze:{eng,neural,lip,lib,voice,lipFrameAt,poseFix,predictFrames,videoTime,lipShapeAt:t=>{ const x=lipFrameAt(t); return x?x.a:null; },lipTimeline,trimSilence,phonesFromChars,synthNeural,loadLibrary}
+    wnetrze:{eng,neural,lip,lib,voice,lipFrameAt,poseFix,predictFrames,videoTime,lipShapeAt:t=>{ const x=lipFrameAt(t); return x?x.a:null; },lipTimeline,lipTargets,trimSilence,phonesFromChars,synthNeural,loadLibrary}
   };
   if(hasTTS) speechSynthesis.addEventListener?.('voiceschanged',()=>emit('glosy',glosySystemowe()));
   return api;

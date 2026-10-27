@@ -119,6 +119,14 @@
 - `tests/test_kat_ust.py` mierzy teraz kąt zamkniętych ust (szpara) i otwartych (oś otworu) względem linii warg w wideo: zamknięte śr. 0,7°, otwarte śr. 2,0°, p90 3,7° (wersja bez pozy: p90 11°, maks 13°).
 - Pozostałe: mowa 10/10, wolne urządzenie (4×: dobór 36 ms/zdanie, 52 kl/s, zero spóźnień), zdarzenia, telefon.
 
+## Stała broda i ruch żuchwy (wersja 13)
+- Błąd wersji 12: nakładka obejmowała całą dolną twarz razem z konturem żuchwy; przeniesione otwarte usta niosły żuchwę z przechylonej pozy (szerszą, okrąglejszą), więc przy przejściach kontur brody skakał o 24–31 px.
+- Naprawa: maska nakładki tylko na usta z najbliższym otoczeniem (elipsa 46×31 px) — kontur brody i żuchwy zawsze z wideo. Nowa warstwa żuchwy (`drawJaw`): broda z wideo rozciągana w pionie od linii ust, o 5 px × (otwarcie nakładki − otwarcie ust w wideo), z bezwładnością mięśni; miękkie przejście do szyi i boków.
+- Biblioteka obrazów: 264 KB (mniejsza maska).
+- Nowy test `tests/test_broda.py` (5 miejsc pętli, 750 klatek): ruch brody −3…+2,8 px, skok między klatkami p99 0,7 px, boki żuchwy p90 1 px (wersja 12: skoki p99 24 px).
+- Przy okazji: obrót nakładki względem twarzy 0,1° (było 2°), szew 4,6 (było 10); otwarte usta p90 2,3°.
+- Pozostałe testy przechodzą: otwieranie ust w 9 miejscach, mowa 10/10, wolne urządzenie (4×: 37 kl/s, dobór 37 ms/zdanie), zdarzenia, telefon.
+
 ## Plan
 1. Ujęcia obiegu: 05 odczyt, 06 analiza, 08 segregowanie, 12 odłożenie (prompty w `docs/ujecia.md`).
 2. Poprawki logo na ścianie → nowy kadr bazowy (wtedy klipy generujemy już z niego).

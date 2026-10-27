@@ -13,6 +13,7 @@ pozy) woła tylko `mowa.powiedz(...)` i nie musi nic wiedzieć o syntezie ani o 
   - `tests/test_kat_ust.py` — kąt ust w całej pętli podczas mowy: ta sama klatka z nakładką i bez;
     kąt zamkniętych ust średnio ≤ 1,5° (p90 ≤ 2,5°), oś otwartych ust p90 ≤ 7°, maks ≤ 9°
   - `tests/test_otwieranie_ust.py` — usta otwierają się w każdym miejscu pętli (maks. ≥ 0,7, ≥ 25% czasu ≥ 0,4, widoczne wnętrze)
+  - `tests/test_broda.py` — kontur brody nie skacze (p99 skoku ≤ 2 px), ruch ±7 px, boki żuchwy ≤ 2 px
   - `tests/test_wolne_urzadzenie.py` — procesor 4× wolniej: bez spóźnień, dobór ≤ 60 ms/zdanie, ≥ 30 kl/s
 
 ## Interfejs
@@ -73,7 +74,10 @@ EgzoMowa.mowione('12,5%')   // tekst w postaci do czytania na głos
 6. **Otwarte usta w każdej pozie.** Nagranie ma szeroko otwarte usta tylko przy przechylonej głowie. Narzędzie
    przenosi je do póz bez otwartych ust (kotwice co 24 klatki): korekta 2×3 z dopasowania dolnej twarzy bez warg
    i żuchwy. W bibliotece to „klatki wirtualne” (kafelek + korekta), rysowane z tą korektą.
-7. **Krótkie głoski.** m/b/p krótsze niż krok ust (40 ms) dostają gwarantowany krok z domkniętymi ustami,
+7. **Broda i żuchwa.** Nakładka obejmuje tylko usta z najbliższym otoczeniem; kontur brody zawsze pochodzi z wideo.
+   Warstwa żuchwy rozciąga brodę z wideo w pionie od linii ust o 5 px × (otwarcie nakładki − otwarcie ust w wideo),
+   z bezwładnością — broda opada przy „a”, unosi się przy „m”, gdy w wideo usta są uchylone.
+8. **Krótkie głoski.** m/b/p krótsze niż krok ust (40 ms) dostają gwarantowany krok z domkniętymi ustami,
    a „a”/„o” — z otwartymi; te kroki mają większą wagę przy doborze.
 
 ## Dodawanie nowych umiejętności

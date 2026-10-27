@@ -109,7 +109,11 @@ X0, Y0, TW, TH = 518, 188, 128, 116
 yy, xx = np.mgrid[0:TH, 0:TW].astype(np.float32)
 cx, cy = MX - X0, MY - Y0 + 14
 ell = ((xx - cx) / 56) ** 2 + ((yy - cy) / 50) ** 2
-mask = np.clip((1 - ell) / 0.45, 0, 1) ** 1.3
+# maska nakładki: TYLKO usta z najbliższym otoczeniem — kontur żuchwy i brody zostaje zawsze z wideo
+# (strona opuszcza brodę z wideo razem z otwieraniem ust); wcześniej nakładka zabierała całą dolną twarz
+# i przy przejściach między klatkami z różnych póz kontur brody „pływał”.
+ellA = ((xx - (MX - X0)) / 46) ** 2 + ((yy - (MY - Y0 + 5)) / 31) ** 2
+mask = np.clip((1 - ellA) / 0.5, 0, 1) ** 1.2
 ang0 = np.radians(-9.5)
 EX = ((xx - (MX - X0)) * np.cos(ang0) - (yy - (MY - Y0)) * np.sin(ang0)) / 30
 EY = ((xx - (MX - X0)) * np.sin(ang0) + (yy - (MY - Y0)) * np.cos(ang0)) / 16
@@ -153,7 +157,7 @@ POSE_LIMIT, ANCHOR_STEP = 16.0, 24
 cxm, cym = MX - X0, MY - Y0
 lipsM = ((xx - cxm) / 36) ** 2 + ((yy - cym - 3) / 19) ** 2 < 1
 regM = (~lipsM & ~(yy > cym + 22) & (ell < 1.0)).astype(np.uint8)
-ringM = (ell > 0.55) & (ell < 1.0) & ~lipsM
+ringM = (ellA > 0.45) & (ellA < 1.0) & ~lipsM
 g_ = lambda c: cv2.GaussianBlur(cv2.cvtColor(c, cv2.COLOR_BGR2GRAY).astype(np.float32), (0, 0), 1.2)
 PT = np.array([f['poza'] for f in frames])
 virt, used = [], {}
