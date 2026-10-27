@@ -11,7 +11,8 @@ pozy) woła tylko `mowa.powiedz(...)` i nie musi nic wiedzieć o syntezie ani o 
 - Testy (serwer testowy na porcie 8768):
   - `tests/test_mowa.py` — 10 sprawdzeń interfejsu (m/b/p, „a”, pauzy, strumień, zdarzenia, stop)
   - `tests/test_kat_ust.py` — kąt ust w całej pętli podczas mowy: ta sama klatka z nakładką i bez;
-    obrót nakładki p95 ≤ 1,5°, kąt szpary warg średnio ≤ 1,5°, przesunięcie ≤ 3 px, szew ≤ 8
+    kąt zamkniętych ust średnio ≤ 1,5° (p90 ≤ 2,5°), oś otwartych ust p90 ≤ 7°, maks ≤ 9°
+  - `tests/test_otwieranie_ust.py` — usta otwierają się w każdym miejscu pętli (maks. ≥ 0,7, ≥ 25% czasu ≥ 0,4, widoczne wnętrze)
   - `tests/test_wolne_urzadzenie.py` — procesor 4× wolniej: bez spóźnień, dobór ≤ 60 ms/zdanie, ≥ 30 kl/s
 
 ## Interfejs
@@ -69,7 +70,10 @@ EgzoMowa.mowione('12,5%')   // tekst w postaci do czytania na głos
    o pozie zbliżonej do tej, która BĘDZIE na ekranie (klatka pętli przewidywana z czasu wideo, trafność ±1 klatka;
    rysowanie według dokładnie wyświetlanej klatki — `requestVideoFrameCallback`). Pauzy między zdaniami:
    zamknięte usta z tej samej pozy. Gdyby wideo się przycięło, klatka z daleka w pozie jest podmieniana.
-6. **Krótkie głoski.** m/b/p krótsze niż krok ust (40 ms) dostają gwarantowany krok z domkniętymi ustami,
+6. **Otwarte usta w każdej pozie.** Nagranie ma szeroko otwarte usta tylko przy przechylonej głowie. Narzędzie
+   przenosi je do póz bez otwartych ust (kotwice co 24 klatki): korekta 2×3 z dopasowania dolnej twarzy bez warg
+   i żuchwy. W bibliotece to „klatki wirtualne” (kafelek + korekta), rysowane z tą korektą.
+7. **Krótkie głoski.** m/b/p krótsze niż krok ust (40 ms) dostają gwarantowany krok z domkniętymi ustami,
    a „a”/„o” — z otwartymi; te kroki mają większą wagę przy doborze.
 
 ## Dodawanie nowych umiejętności

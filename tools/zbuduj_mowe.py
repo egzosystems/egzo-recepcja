@@ -142,6 +142,50 @@ for p in extra:
 omax = max(1.0, np.percentile([f['open'] for f in frames], 98)); tmax = max(1.0, np.percentile([f['teeth'] for f in frames], 98))
 idx = {(f['src'], f['i']): n for n, f in enumerate(frames)}
 nxt = [idx.get((f['src'], f['i'] + (STEP if f['src'] == os.path.basename(idle_p) else 1)), -1) for f in frames]
+for f in frames: f['fo'] = min(1.0, f['open'] / omax); f['ft'] = min(1.0, f['teeth'] / tmax)
+
+# --- 4) PRZENIESIENIE OTWARTYCH UST do póz, w których nagranie ich nie ma
+# W pętli usta otwierają się tylko przy przechylonej głowie; w prostej pozie są prawie zamknięte. Dla kotwic
+# co ANCHOR_STEP klatek pętli liczymy, jak wpasować otwarte usta z innej pozy w tę pozę: dopasowanie ECC
+# dolnej części twarzy BEZ warg i BEZ żuchwy (nos, rynienka, policzki) → korekta (macierz 2×3).
+# Strona rysuje wtedy tę samą klatkę z korektą — w bibliotece to „klatka wirtualna” o pozie kotwicy.
+POSE_LIMIT, ANCHOR_STEP = 16.0, 24
+cxm, cym = MX - X0, MY - Y0
+lipsM = ((xx - cxm) / 36) ** 2 + ((yy - cym - 3) / 19) ** 2 < 1
+regM = (~lipsM & ~(yy > cym + 22) & (ell < 1.0)).astype(np.uint8)
+ringM = (ell > 0.55) & (ell < 1.0) & ~lipsM
+g_ = lambda c: cv2.GaussianBlur(cv2.cvtColor(c, cv2.COLOR_BGR2GRAY).astype(np.float32), (0, 0), 1.2)
+PT = np.array([f['poza'] for f in frames])
+virt, used = [], {}
+for a in range(0, len(idle), ANCHOR_STEP):
+    if nin[a] < 0.85: continue
+    d = np.linalg.norm(PT - Pi[a], axis=1)
+    near_open = max([f['fo'] for f, dd in zip(frames, d) if dd <= POSE_LIMIT] or [0])
+    if near_open >= 0.6: continue                     # ta poza ma własne otwarte usta
+    dst = crop_of(idle[a][2], Ts[a]); gd = g_(dst)
+    lab_a = cv2.cvtColor(dst, cv2.COLOR_BGR2LAB).astype(np.float32)[ringM].mean(0)
+    for k, f in enumerate(frames):
+        if f['fo'] < 0.3 or d[k] <= POSE_LIMIT: continue
+        try:
+            cc, W = cv2.findTransformECC(gd, g_(f['crop']), np.eye(2, 3, dtype=np.float32), cv2.MOTION_AFFINE,
+                                         (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 300, 1e-6), regM, 3)
+        except cv2.error:
+            continue
+        rot = math.degrees(math.atan2(W[1, 0], W[0, 0])); sc = math.sqrt(abs(np.linalg.det(W[:, :2])))
+        if cc < 0.9 or abs(rot) > 15 or not 0.85 < sc < 1.18: continue
+        C = cv2.invertAffineTransform(W)              # piksel klatki źródłowej → miejsce w pozie kotwicy
+        used.setdefault(k, []).append(lab_a)
+        virt.append(dict(k=k, a=a, m=C, rot=rot))
+# kolor: jedna przebarwiona kopia każdej przenoszonej klatki (do średniego koloru skóry kotwic, w których jest użyta)
+copy_of = {}
+for k, labs in used.items():
+    c = cv2.cvtColor(frames[k]['crop'], cv2.COLOR_BGR2LAB).astype(np.float32)
+    c += (np.mean(labs, axis=0) - c[ringM].mean(0))
+    nf = dict(frames[k]); nf['crop'] = cv2.cvtColor(np.clip(c, 0, 255).astype(np.uint8), cv2.COLOR_LAB2BGR); nf['kopia'] = True
+    copy_of[k] = len(frames); frames.append(nf); nxt.append(-1)
+vidx = {(v['k'], v['a']): n for n, v in enumerate(virt)}
+vnext = [vidx.get((nxt[v['k']], v['a']), -1) if nxt[v['k']] >= 0 else -1 for v in virt]
+print(f'przeniesione otwarte usta: {len(virt)} klatek wirtualnych w {len(set(v["a"] for v in virt))} kotwicach | korekta kąta {min(v["rot"] for v in virt):+.1f}…{max(v["rot"] for v in virt):+.1f}°' if virt else 'przeniesione otwarte usta: brak')
 cols = 16; rows = (len(frames) + cols - 1) // cols
 grid = np.zeros((rows * TH, cols * TW, 4), np.uint8)
 for n, f in enumerate(frames):
@@ -149,7 +193,9 @@ for n, f in enumerate(frames):
     grid[r * TH:(r + 1) * TH, cc * TW:(cc + 1) * TW] = np.dstack([f['crop'], (mask * 255).astype(np.uint8)])
 cv2.imwrite(os.path.join(out_dir, 'usta-klatki.webp'), grid, [cv2.IMWRITE_WEBP_QUALITY, 90])
 json.dump({'tileW': TW, 'tileH': TH, 'x0': X0, 'y0': Y0, 'cols': cols,
-           'frames': [{'src': f['src'], 'i': f['i'], 'open': round(min(1.0, f['open'] / omax), 3), 'teeth': round(min(1.0, f['teeth'] / tmax), 3)} for f in frames],
+           'frames': [{'src': f['src'], 'i': f['i'], 'open': round(f['fo'], 3), 'teeth': round(f['ft'], 3), **({'kopia': 1} if f.get('kopia') else {})} for f in frames],
            'poza': [[round(float(v), 2) for v in f['poza']] for f in frames],
-           'next': nxt}, open(os.path.join(out_dir, 'usta-klatki.json'), 'w'), separators=(',', ':'))
+           'next': nxt,
+           # klatki wirtualne: [kafelek, klatka_kotwicy, a,b,c,d,e,f (macierz w układzie kafelka), następna_wirtualna]
+           'wirtualne': [[copy_of[v['k']], v['a'], *[round(float(x), 4) for x in (v['m'][0, 0], v['m'][1, 0], v['m'][0, 1], v['m'][1, 1], v['m'][0, 2], v['m'][1, 2])], vn] for v, vn in zip(virt, vnext)]}, open(os.path.join(out_dir, 'usta-klatki.json'), 'w'), separators=(',', ':'))
 print('biblioteka klatek:', len(frames), '| ciągi:', sum(1 for x in nxt if x >= 0), '| plik', os.path.getsize(os.path.join(out_dir, 'usta-klatki.webp')) // 1024, 'KB')

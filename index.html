@@ -720,7 +720,7 @@ function utworz(opt){
      Każda klatka ust ma POZĘ GŁOWY, z której pochodzi. Wklejamy tylko usta z klatek o pozie bliskiej
      obrazowi na ekranie — płaskie przekształcenie nie odda obrotu głowy w przestrzeni, więc usta z innej
      pozy byłyby krzywe (do 10°); przy bliskiej pozie błąd kąta < 1°. */
-  const POSE_FREE=6, POSE_W=.03, POSE_MAX=16, K_CAND=40;
+  const POSE_FREE=6, POSE_W=.03, POSE_MAX=16, K_CAND=64;
   const lip={img:null,lib:null,tory:{},segs:[],alpha:0,cur:-1,last:null,canvas:o.canvas,ctx:o.canvas?o.canvas.getContext('2d'):null,ready:null,fixes:0,frame:-1,diag:{n:0,off:0,maxOff:0}};
   lip.ready=(async()=>{ try{
     const [libj,track]=await Promise.all([fetch(o.bazaUst+'usta-klatki.json').then(r=>r.json()),fetch(o.bazaUst+'usta-tor.json').then(r=>r.json())]);
@@ -728,13 +728,18 @@ function utworz(opt){
     lip.fps=track.fps||24;
     for(const k in track) if(Array.isArray(track[k])&&Array.isArray(track[k][0])) lip.tory[k]=track[k];   // tor dla każdego klipu (idle, kolejne pozy…)
     lip.track=lip.tory.idle;
-    lip.open=Float32Array.from(libj.frames.map(f=>f.open)); lip.next=Int16Array.from(libj.next);
-    lip.closed=lip.open.indexOf(Math.min(...lip.open));
+    // lista klatek ust: prawdziwe (kafelek w swojej pozie) + wirtualne (kafelek z korektą, wpasowany w pozę kotwicy)
+    const fr=libj.frames, V=libj.wirtualne||[], nR=fr.length, nE=nR+V.length;
+    lip.etile=new Int16Array(nE); lip.emat=new Array(nE).fill(null); lip.open=new Float32Array(nE); lip.next=new Int16Array(nE); lip.real=new Uint8Array(nE);
+    for(let e=0;e<nR;e++){ lip.etile[e]=e; lip.open[e]=fr[e].open; lip.next[e]=libj.next[e]; lip.real[e]=fr[e].kopia?0:1; }
+    V.forEach((v,i)=>{ const e=nR+i; lip.etile[e]=v[0]; lip.emat[e]=v.slice(2,8); lip.open[e]=fr[v[0]].open; lip.next[e]=v[8]>=0?nR+v[8]:-1; });
+    { let mi=0; for(let e=1;e<nR;e++) if(lip.real[e]&&lip.open[e]<lip.open[mi]) mi=e; lip.closed=mi; }
     const PL=track.poza&&track.poza.idle, PT=libj.poza;
-    if(PL&&PT&&PT.length===libj.frames.length){
+    if(PL&&PT&&PT.length===nR){
       // odległość pozy: każda klatka ust × każda klatka pętli; dla każdej klatki pętli K najbliższych klatek ust
-      const nL=PL.length, nT=PT.length, Dm=new Float32Array(nT*nL);
-      for(let t=0;t<nT;t++) for(let j=0;j<nL;j++){ let s=0; for(let d=0;d<PT[t].length;d++){ const x=PT[t][d]-PL[j][d]; s+=x*x; } Dm[t*nL+j]=Math.sqrt(s); }
+      const nL=PL.length, nT=nE, Dm=new Float32Array(nT*nL);
+      const poseOf=e=>e<nR?(lip.real[e]?PT[e]:null):PL[V[e-nR][1]];   // wirtualna ma pozę swojej kotwicy; kopie tylko przez wirtualne
+      for(let t=0;t<nT;t++){ const P=poseOf(t); for(let j=0;j<nL;j++){ if(!P){ Dm[t*nL+j]=1e6; continue; } let s=0; for(let d=0;d<P.length;d++){ const x=P[d]-PL[j][d]; s+=x*x; } Dm[t*nL+j]=Math.sqrt(s); } }
       const k=Math.min(K_CAND,nT), cand=new Int16Array(nL*k), clen=new Uint8Array(nL), ids=[...Array(nT).keys()];
       for(let j=0;j<nL;j++){ ids.sort((a,b)=>Dm[a*nL+j]-Dm[b*nL+j]); let n=0;
         for(let q=0;q<k;q++){ if(q>=6&&Dm[ids[q]*nL+j]>POSE_MAX) break; cand[j*k+q]=ids[q]; n++; } clen[j]=n; }
@@ -766,7 +771,7 @@ function utworz(opt){
         nc[q]=best+wt[t]*Math.abs(open[f]-tg[t])+(pose?poseCost(f,js[t]):0); back[t*k+q]=bi; }
     };
     const pose=!!(lip.cand&&js), k=pose?lip.K:open.length;
-    const all=Int16Array.from({length:open.length},(_,i)=>i);
+    const all=Int16Array.from({length:open.length},(_,i)=>i).filter(e=>lip.real[e]);
     const setAt=t=>pose?lip.cand.subarray(js[t]*k,js[t]*k+lip.clen[js[t]]):all;
     let prev=setAt(0); const states=new Int16Array(T*k), back=new Int16Array(T*k);
     let cost=new Float32Array(k), nc=new Float32Array(k); states.set(prev,0);
@@ -797,9 +802,11 @@ function utworz(opt){
       return {a:s.tl[kk], b:s.tl[Math.min(s.tl.length-1,k+1)], f:pos-k, j:s.tl.js?s.tl.js[kk]:-1}; } }
     return null;
   }
-  function drawLipTile(c,idx,alpha,x0,y0){
-    const L=lip.lib, tw=L.tileW, th=L.tileH, sx=(idx%L.cols)*tw, sy=Math.floor(idx/L.cols)*th;
-    c.globalAlpha=alpha; c.drawImage(lip.img,sx,sy,tw,th,x0,y0,tw,th);
+  function drawLipTile(c,e,alpha,x0,y0,T){
+    const L=lip.lib, tw=L.tileW, th=L.tileH, t=lip.etile[e], sx=(t%L.cols)*tw, sy=Math.floor(t/L.cols)*th, m=lip.emat[e];
+    c.setTransform(T[0],T[1],T[2],T[3],T[4],T[5]); c.globalAlpha=alpha;
+    if(m){ c.translate(x0,y0); c.transform(m[0],m[1],m[2],m[3],m[4],m[5]); c.drawImage(lip.img,sx,sy,tw,th,0,0,tw,th); }   // przeniesione usta: korekta do tej pozy
+    else c.drawImage(lip.img,sx,sy,tw,th,x0,y0,tw,th);
   }
   function lipFrame(){
     requestAnimationFrame(lipFrame);
@@ -820,7 +827,7 @@ function utworz(opt){
     if(pj>=0&&fi>=0){ let d=Math.abs(pj-fi); d=Math.min(d,lip.nL-d); const g=lip.diag; g.n++; g.off+=d; g.maxOff=Math.max(g.maxOff,d); }   // trafność przewidywania klatki
     if(!tr||tr[3]<.6) speaking=false;
     lip.alpha+=((speaking?1:0)-lip.alpha)*(speaking?.4:.15);
-    if(lip.last){ c.setTransform(1,0,0,1,0,0); c.clearRect(lip.last[0]-3,lip.last[1]-3,lip.last[2]+6,lip.last[3]+6); lip.last=null; }
+    if(lip.last){ c.setTransform(1,0,0,1,0,0); c.clearRect(lip.last[0]-14,lip.last[1]-14,lip.last[2]+28,lip.last[3]+28); lip.last=null; }
     if(lip.alpha<.02||!tr) return;
     const L=lip.lib, x0=L.x0, y0=L.y0, tw=L.tileW, th=L.tileH;
     const [A,B,Cc,D,E,F]=tr[5];
@@ -833,8 +840,8 @@ function utworz(opt){
       if(speaking&&pj<0){ fa=fb=closedAt(fi); ff=0; }   // krótka pauza między zdaniami: zamknięte usta w tej samej pozie
       else { fa=poseFix(fa,fi); fb=poseFix(fb,fi); }
     }
-    drawLipTile(c,fa,lip.alpha,x0,y0);
-    if(fb!==fa&&ff>.05) drawLipTile(c,fb,lip.alpha*ff,x0,y0);   // przejście do następnej prawdziwej klatki
+    drawLipTile(c,fa,lip.alpha,x0,y0,tr[5]);
+    if(fb!==fa&&ff>.05) drawLipTile(c,fb,lip.alpha*ff,x0,y0,tr[5]);   // przejście do następnej prawdziwej klatki
     lip.cur=fa; c.globalAlpha=1; c.setTransform(1,0,0,1,0,0);
   }
   requestAnimationFrame(lipFrame);

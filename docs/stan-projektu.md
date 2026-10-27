@@ -111,6 +111,14 @@
 - Test `tests/test_kat_ust.py` (przeglądarka, 110 próbek z 11 miejsc pętli podczas mowy): obrót nakładki względem twarzy śr. 0,28°, p95 0,75°; kąt szpary zamkniętych warg śr. 0,58° (poprzednia wersja: 2,9°, do 7,6°); przesunięcie p95 1,5 px (poprzednio 6,5 px); szew 6,3 (poprzednio 15,7).
 - Pozostałe testy: mowa 10/10 (3× z rzędu), zdarzenia, pierwsze włączenie na telefonie, wolne urządzenie (4× wolniejszy procesor: 52 kl/s, dobór 24 ms/zdanie, zero spóźnień).
 
+## Otwarte usta w każdej pozie (wersja 12)
+- Błąd wersji 11: w prostej pozie (większość pętli) usta prawie się nie otwierały — najszersze dostępne klatki miały otwarcie 0,24, bo w nagraniu usta otwierają się tylko przy przechylonej głowie, a dobór po pozie nie pozwalał ich użyć.
+- Naprawa: krok 4 w `tools/zbuduj_mowe.py` — otwarte usta z przechylonej części są przenoszone do 15 kotwic prostej pozy (co 24 klatki): dopasowanie ECC dolnej części twarzy bez warg i żuchwy daje korektę (macierz 2×3, kąt −1,9…+8,3°), kolor dopasowany do skóry kotwic. 585 „klatek wirtualnych” = kafelek + korekta (bez powielania obrazów; biblioteka 607 KB).
+- Strona rysuje klatkę wirtualną z korektą (`drawLipTile`), dobór traktuje ją jak klatkę o pozie kotwicy.
+- Nowy test `tests/test_otwieranie_ust.py`: w 9 miejscach pętli maks. otwarcie 1,0, 36–89% czasu mowy ≥ 0,4, widoczne wnętrze ust 172–289 px (wersja 11: 0,24 i 0–11 px w prostej pozie).
+- `tests/test_kat_ust.py` mierzy teraz kąt zamkniętych ust (szpara) i otwartych (oś otworu) względem linii warg w wideo: zamknięte śr. 0,7°, otwarte śr. 2,0°, p90 3,7° (wersja bez pozy: p90 11°, maks 13°).
+- Pozostałe: mowa 10/10, wolne urządzenie (4×: dobór 36 ms/zdanie, 52 kl/s, zero spóźnień), zdarzenia, telefon.
+
 ## Plan
 1. Ujęcia obiegu: 05 odczyt, 06 analiza, 08 segregowanie, 12 odłożenie (prompty w `docs/ujecia.md`).
 2. Poprawki logo na ścianie → nowy kadr bazowy (wtedy klipy generujemy już z niego).
