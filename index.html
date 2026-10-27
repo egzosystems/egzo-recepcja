@@ -494,40 +494,92 @@ function voiceChain(ctx){
   hp.connect(lo); lo.connect(mid); mid.connect(hi); hi.connect(comp); comp.connect(out); out.connect(ctx.destination);
   return neural.chain=hp;
 }
-function playPcm(m,tok,text){
-  return new Promise(r=>{
-    if(tok!==sayTok||!neural.ctx){ r(); return; }
-    const ctx=neural.ctx, buf=ctx.createBuffer(1,m.pcm.length,m.sampleRate); buf.copyToChannel(m.pcm,0);
-    const s=ctx.createBufferSource(); s.buffer=buf; s.connect(voiceChain(ctx)); neural.src=s;
-    const vis=lipVisemes(m.pcm,m.sampleRate,text);
-    s.onended=()=>{ if(neural.src===s) neural.src=null; if(lip.cur&&lip.cur.src===s) lip.cur=null; r(); };
-    const t0=ctx.currentTime+.03; s.start(t0);
-    lip.cur={src:s,t0,vis,dur:buf.duration};
-  });
+/* ---------- Silnik mowy: kolejka zdań na osi czasu karty dźwiękowej (bez dziur między zdaniami) ---------- */
+const eng={tok:0,queue:[],busy:false,endAt:0,last:'',live:0,waiters:[],stats:[],rtf:.6,mspc:30,spc:.075};
+function pauseAfter(t){ return /[?!]["”»]?$/.test(t)?.32:/[.…]["”»]?$/.test(t)?.26:/[,;:]$/.test(t)?.12:.18; }
+function trimSilence(pcm,sr){
+  // cisza na brzegach zdania (model dodaje ok. 50–100 ms) — przycinamy, pauzy ustawia silnik
+  let peak=0; for(let i=0;i<pcm.length;i++) peak=Math.max(peak,Math.abs(pcm[i]));
+  const th=peak*.02, pad=Math.round(sr*.025); let a=0, b=pcm.length-1;
+  while(a<b&&Math.abs(pcm[a])<th) a++; while(b>a&&Math.abs(pcm[b])<th) b--;
+  a=Math.max(0,a-pad); b=Math.min(pcm.length,b+pad*2);
+  const out=pcm.slice(a,b);
+  const f=Math.min(out.length>>1,Math.round(sr*.006));            // miękkie wejście i wyjście, bez trzasków
+  for(let i=0;i<f;i++){ const g=i/f; out[i]*=g; out[out.length-1-i]*=g; }
+  return {pcm:out,offset:a/sr};
 }
-function stopSpeech(){ sayTok++; try{neural.src?.stop();}catch(e){} neural.src=null; lip.cur=null; if(hasTTS) speechSynthesis.cancel(); }
+function speechDone(){ if(!eng.busy&&!eng.queue.length&&eng.live===0){ const w=eng.waiters.splice(0); w.forEach(f=>f()); } }
+function waitSpeech(){ return new Promise(r=>{ eng.waiters.push(r); speechDone(); }); }
+function enqueueSpeech(sentence){ if(!sentence.trim()) return; eng.queue.push(sentence); pumpSpeech(); }
+async function pumpSpeech(){
+  if(eng.busy) return; eng.busy=true; const tok=eng.tok;
+  while(eng.queue.length&&tok===eng.tok){
+    const text=eng.queue.shift(); let m;
+    try{ m=await synthNeural(text); }catch(e){ continue; }
+    if(tok!==eng.tok) break;
+    scheduleSpeech(m,text,tok);
+  }
+  if(tok===eng.tok){ eng.busy=false; speechDone(); }
+}
+function scheduleSpeech(m,text,tok){
+  const ctx=neural.ctx; if(!ctx) return;
+  const sr=m.sampleRate, tr=trimSilence(m.pcm,sr);
+  const buf=ctx.createBuffer(1,tr.pcm.length,sr); buf.copyToChannel(tr.pcm,0);
+  const s=ctx.createBufferSource(); s.buffer=buf; s.connect(voiceChain(ctx));
+  const now=ctx.currentTime, gap=eng.endAt>now?pauseAfter(eng.last):0;
+  // pomiar tego urządzenia: ms syntezy na literę i sekundy mowy na literę (średnie kroczące)
+  if(m.ms&&text.length>8){ eng.mspc=eng.mspc*.4+(m.ms/text.length)*.6; eng.spc=eng.spc*.4+(buf.duration/text.length)*.6; eng.rtf=eng.mspc/1000/eng.spc; }
+  let lead=0;
+  if(eng.endAt<=now&&eng.queue.length){
+    // czy kolejne zdania zdążą się policzyć, zanim przyjdzie ich kolej? jeśli nie — start chwilę później
+    let tSynth=0, tPlay=buf.duration, need=0;
+    for(const q of eng.queue){ tSynth+=q.length*eng.mspc/1000*1.1; need=Math.max(need,tSynth-tPlay); tPlay+=q.length*eng.spc+pauseAfter(q); }
+    lead=Math.min(3,Math.max(0,need));
+  }
+  const start=Math.max(now+.05+lead, eng.endAt+gap);
+  eng.stats.push({gap:+(start-Math.max(eng.endAt,now)).toFixed(3),late:eng.endAt>0&&now>eng.endAt+.02?+(now-eng.endAt).toFixed(3):0,synthMs:Math.round(m.ms||0),sec:+buf.duration.toFixed(2)});
+  s.start(start); eng.endAt=start+buf.duration; eng.last=text; eng.live++;
+  lip.segs.push({t0:start,dur:buf.duration,tl:lipTimeline(m,text,tr.offset,buf.duration,tr.pcm)});
+  if(lip.segs.length>12) lip.segs.shift();
+  s.onended=()=>{ eng.live--; const i=eng.sources.indexOf(s); if(i>=0) eng.sources.splice(i,1); speechDone(); };
+  eng.sources.push(s);
+}
+eng.sources=[];
+function stopSpeech(){
+  if(neural.worker&&neural.seq) neural.worker.postMessage({type:'cancel',upTo:neural.seq});
+  eng.tok++; eng.queue=[]; eng.busy=false; eng.endAt=0; eng.last='';
+  for(const s of eng.sources){ try{ s.onended=null; s.stop(); }catch(e){} }
+  eng.sources=[]; eng.live=0; lip.segs=[]; speechDone();
+  if(hasTTS) speechSynthesis.cancel();
+}
 function sentences(t){ return (t.match(/[^.!?…]+[.!?…]*["”»]?\s*/g)||[t]).map(s=>s.trim()).filter(Boolean); }
-
 async function say(text){
-  stopSpeech(); const tok=sayTok;
+  stopSpeech(); const tok=++sayTok;
   subtitle(text);
-  const fin=()=>{ if(tok===sayTok) subTimer=setTimeout(()=>subtitle(''),700); };
-  if(voice.on&&voice.engine==='neural'&&neural.state==='ready'){
-    try{
-      const parts=sentences(spokenPL(text)); let next=synthNeural(parts[0]);
-      for(let i=0;i<parts.length;i++){
-        const m=await next; if(tok!==sayTok) return;
-        next=i+1<parts.length?synthNeural(parts[i+1]):null;
-        await playPcm(m,tok,parts[i]); if(tok!==sayTok) return;
-      }
-      fin(); return;
-    }catch(e){ /* spada na syntezator systemu niżej */ }
+  const fin=()=>{ if(tok===sayTok) subTimer=setTimeout(()=>subtitle(''),600); };
+  if(voice.on&&voice.engine==='neural'&&neural.state==='ready'&&neural.ctx){
+    sentences(spokenPL(text)).forEach(enqueueSpeech);
+    await waitSpeech(); fin(); return;
   }
   if(voice.on&&hasTTS&&speechSynthesis.getVoices().length){
     const u=new SpeechSynthesisUtterance(text); u.lang='pl-PL'; if(voice.v) u.voice=voice.v; u.rate=voice.rate; u.pitch=voice.pitch;
     await new Promise(r=>{ u.onend=r; u.onerror=r; speechSynthesis.speak(u); }); fin(); return;
   }
   subTimer=setTimeout(()=>{ if(tok===sayTok) subtitle(''); },Math.max(2200,text.length*70));
+}
+// mowa „na żywo”: tekst dopływa kawałkami (odpowiedź Claude), zdania idą do kolejki, gdy są kompletne
+function speechStream(){
+  stopSpeech(); const tok=++sayTok; let done=0;
+  const neuralOn=()=>voice.on&&voice.engine==='neural'&&neural.state==='ready'&&neural.ctx;
+  return {
+    push(full){ if(tok!==sayTok) return; subtitle(full); if(!neuralOn()) return;
+      const re=/[^.!?…]+[.!?…]+["”»]?(?=\s|$)/g; re.lastIndex=done; let m;
+      while((m=re.exec(full))&&m.index>=done&&/\s/.test(full[re.lastIndex]||'')){ enqueueSpeech(spokenPL(m[0].trim())); done=re.lastIndex; } },
+    async end(full){ if(tok!==sayTok) return; subtitle(full);
+      if(neuralOn()){ const rest=full.slice(done).trim(); if(rest) sentences(spokenPL(rest)).forEach(enqueueSpeech); await waitSpeech(); }
+      else await say(full);
+      if(tok===sayTok) subTimer=setTimeout(()=>subtitle(''),600); }
+  };
 }
 
 const voiceBtn=document.getElementById('voiceBtn');
@@ -584,57 +636,117 @@ function spokenPL(t){
           .replace(/\d+/g,m=>numPL(+m)).replace(/[_/]+/g,' ').replace(/%/g,' procent').replace(/\s+/g,' ');
 }
 
-/* ---------- Synchronizacja ust: kształt z dźwięku (głośność) i tekstu (samogłoski) ---------- */
-const lip={img:null,meta:null,track:null,cur:null,alpha:0,shA:0,shB:0,mix:1,canvas:document.getElementById('lipCanvas')};
+/* ---------- Synchronizacja ust: czasy liter z modelu + polska wymowa ---------- */
+const lip={img:null,meta:null,track:null,segs:[],alpha:0,shA:0,shB:0,mix:1,last:null,canvas:document.getElementById('lipCanvas')};
 lip.ctx=lip.canvas.getContext('2d');
 (async()=>{ try{
   const [meta,track]=await Promise.all([fetch('lip/usta-atlas.json').then(r=>r.json()),fetch('lip/usta-tor.json').then(r=>r.json())]);
   const img=new Image(); img.src='lip/usta-atlas.png'; await img.decode();
   lip.meta=meta; lip.track=track.idle; lip.img=img; lip.SH=Object.fromEntries(meta.shapes.map((n,i)=>[n,i]));
 }catch(e){ lip.img=null; } })();
-function lipVisemes(pcm,sr,text){
-  const hop=Math.round(sr*.01), n=Math.max(1,Math.floor(pcm.length/hop)), env=new Float32Array(n);
-  for(let i=0;i<n;i++){ let a=0; const s=i*hop, e=Math.min(pcm.length,s+2*hop); for(let k=s;k<e;k++) a+=pcm[k]*pcm[k]; env[i]=Math.sqrt(a/Math.max(1,e-s)); }
-  const sm=new Float32Array(n); for(let i=0;i<n;i++){ sm[i]=(env[Math.max(0,i-1)]+2*env[i]+env[Math.min(n-1,i+1)])/4; }
-  const sorted=Array.from(sm).sort((a,b)=>a-b), p95=sorted[Math.floor(.95*(n-1))]||1;
-  for(let i=0;i<n;i++) sm[i]=Math.min(1,sm[i]/p95);
-  // sylaby = lokalne maksima głośności; każdej przypisujemy kolejną samogłoskę z tekstu
-  const peaks=[]; for(let i=1;i<n-1;i++){ if(sm[i]>.35&&sm[i]>=sm[i-1]&&sm[i]>=sm[i+1]&&(!peaks.length||i-peaks[peaks.length-1]>=9)) peaks.push(i); }
-  const vow=(text.toLowerCase().match(/[aąeęioóuy]/g)||['a']);
-  const SH=lip.SH||{rest:0,slight:1,mid:2,open:3,wide:4,o:5,o2:6}, out=new Uint8Array(n);
-  let pi=0;
-  for(let i=0;i<n;i++){
-    while(pi<peaks.length-1 && Math.abs(peaks[pi+1]-i)<Math.abs(peaks[pi]-i)) pi++;
-    const v=peaks.length?vow[Math.min(vow.length-1,Math.round(pi*(vow.length-1)/Math.max(1,peaks.length-1)))]:'a';
-    const L=sm[i];
-    let sh;
-    if(L<.1) sh='rest';
-    else if('oóuą'.includes(v)) sh=L>.5?'o2':'o';
-    else if('eęiy'.includes(v)) sh=L>.55?'wide':'slight';
-    else sh=L>.55?'open':(L>.25?'mid':'slight');
-    out[i]=SH[sh];
+const CLOSED=255;   // usta zamknięte = prawdziwe usta z wideo (nakładka znika)
+const VOWELS='aąeęioóuy';
+// głoski z liter: dwuznaki i zmiękczenia (ci, si, zi, ni, dzi + samogłoska → jedna głoska)
+function phonesFromChars(chars,dur){
+  const units=[]; let i=0;
+  // każdy znak dostaje swój czas + czas następnej przerwy „_” (przejście)
+  const items=[]; for(let k=0;k<chars.length;k++){ if(chars[k]==='_'){ if(items.length) items[items.length-1].d+=dur[k]; else items.push({c:' ',d:dur[k]}); } else items.push({c:chars[k],d:dur[k]}); }
+  while(i<items.length){
+    const c=items[i].c, n=items[i+1]?.c||'', n2=items[i+2]?.c||'';
+    let ph=c, d=items[i].d, take=1;
+    const di=c+n;
+    if(c==='d'&&(n==='ż'||n==='ź'||n==='z')){ ph=di; take=2; if(n==='z'&&n2==='i'&&VOWELS.includes(items[i+3]?.c||'')){ ph='dź'; take=3; } }
+    else if(['sz','cz','rz','ch'].includes(di)){ ph=di; take=2; }
+    else if('csznd'.includes(c)&&n==='i'&&VOWELS.includes(n2)&&n2!=='i'){ ph={c:'ć',s:'ś',z:'ź',n:'ń'}[c]||c; take=2; }
+    for(let k=1;k<take;k++) d+=items[i+k].d;
+    units.push({p:ph,d}); i+=take;
   }
-  // wygładzenie: najczęstszy kształt w oknie 70 ms — bez migotania między kształtami
-  const sm2=new Uint8Array(n), cnt=new Uint8Array(8);
-  for(let i=0;i<n;i++){ cnt.fill(0); for(let k=Math.max(0,i-3);k<=Math.min(n-1,i+3);k++) cnt[out[k]]++; let b=out[i]; for(let q=0;q<8;q++) if(cnt[q]>cnt[b]) b=q; sm2[i]=b; }
-  return sm2;
+  return units;
+}
+function visClass(p){
+  if(p===' '||/^[.,!?;:…"”»-]$/.test(p)) return 'SIL';
+  if(p==='a') return 'A'; if(p==='e'||p==='ę') return 'E'; if(p==='i'||p==='j') return 'I'; if(p==='y') return 'Y';
+  if(p==='o'||p==='ą') return 'O'; if(p==='u'||p==='ó') return 'U'; if(p==='ł') return 'U';
+  if('mbp'.includes(p)) return 'MBP'; if(p==='f'||p==='w') return 'FV';
+  if(['sz','cz','rz','ż','dż'].includes(p)) return 'SH';
+  if(['s','z','c','dz','ś','ź','ć','dź'].includes(p)) return 'S';
+  return 'N';  // t d n ń l r k g ch h — kształt warg od sąsiednich samogłosek
+}
+function lipTimeline(m,text,offset,total,pcm){
+  const step=.01, n=Math.max(1,Math.ceil(total/step)), out=new Uint8Array(n).fill(CLOSED);
+  const SH=lip.SH||{}; if(!m.dur||!m.chars) return lipFallback(pcm,m.sampleRate,text,n);
+  // głośność co 10 ms (siła otwarcia)
+  const sr=m.sampleRate, hop=Math.round(sr*step), env=new Float32Array(n);
+  for(let i=0;i<n;i++){ let a=0; const s=i*hop, e=Math.min(pcm.length,s+2*hop); for(let k=s;k<e;k++) a+=pcm[k]*pcm[k]; env[i]=Math.sqrt(a/Math.max(1,e-s)); }
+  const srt=Array.from(env).sort((a,b)=>a-b), p95=srt[Math.floor(.95*(n-1))]||1; for(let i=0;i<n;i++) env[i]=Math.min(1,env[i]/p95);
+  const fr=m.hop/sr, units=phonesFromChars(m.chars,m.dur);
+  let t=-offset; const seg=[];
+  for(const u of units){ const t0=t, t1=t+u.d*fr; t=t1; seg.push({v:visClass(u.p),p:u.p,t0,t1}); }
+  const vowelShape=(v,L)=>v==='A'?(L>.5?'open':'mid'):v==='E'?(L>.5?'wide':'slight'):v==='I'?(L>.55?'teeth':'s'):v==='Y'?(L>.5?'wide':'slight'):v==='O'?'o':v==='U'?'mid':'slight';
+  const nearVowel=(k)=>{ for(let d=1;d<4;d++){ const a=seg[k+d], b=seg[k-d]; if(a&&'AEIYOU'.includes(a.v)&&a.v.length===1) return a.v; if(b&&'AEIYOU'.includes(b.v)&&b.v.length===1) return b.v; } return 'E'; };
+  for(let k=0;k<seg.length;k++){
+    const g=seg[k]; let a=Math.max(0,Math.floor(g.t0/step)), b=Math.min(n,Math.ceil(g.t1/step));
+    if(b<=a) continue;
+    let L=0; for(let i=a;i<b;i++) L=Math.max(L,env[i]);
+    let sh;
+    switch(g.v){
+      case 'SIL': {
+        const long=(g.t1-g.t0)>(/[.,!?;:…]/.test(g.p)?.07:.16);
+        if(long){ sh=CLOSED; break; }
+        // krótka przerwa między słowami: wargi zostają lekko rozchylone (chyba że obok jest m/b/p)
+        const nb=[seg[k-1],seg[k+1]];
+        sh=nb.some(x=>x&&x.v==='MBP')?CLOSED:'slight'; break; }
+      case 'MBP': sh=CLOSED; break;
+      case 'FV': sh='slight'; break;
+      case 'SH': sh='o2'; break;
+      case 'S': sh='s'; break;
+      case 'N': { const v=nearVowel(k); sh=v==='O'||v==='U'?'mid':v==='A'?'mid':'slight'; break; }
+      default: sh=vowelShape(g.v,L);
+    }
+    if(sh===null) continue;
+    const id=sh===CLOSED?CLOSED:(SH[sh]??1);
+    for(let i=a;i<b;i++) out[i]=id;
+    // zaokrąglenie warg zaczyna się wcześniej (antycypacja) — tylko w miejsce głosek neutralnych
+    if(g.v==='O'||g.v==='U'||g.v==='SH'){ for(let i=Math.max(0,a-5);i<a;i++){ const pv=seg.find(s=>s.t0<=i*step&&s.t1>i*step); if(pv&&(pv.v==='N'||pv.v==='S')) out[i]=id; } }
+  }
+  // wygładzenie: kształty krótsze niż 30 ms między dwoma otwartymi kształtami przejmują sąsiada;
+  // otwarcia przy domknięciu (np. „a” w „mama”) zostają — to najbardziej widoczny ruch ust
+  for(let pass=0;pass<2;pass++) for(let i=1;i<n-1;i++){
+    if(out[i]===CLOSED) continue;
+    let j=i; while(j<n&&out[j]===out[i]) j++;
+    const prev=out[i-1], next=j<n?out[j]:CLOSED;
+    if(j-i<3&&prev!==CLOSED&&next!==CLOSED){ for(let k=i;k<j;k++) out[k]=prev; }
+    i=j-1;
+  }
+  return out;
+}
+function lipFallback(pcm,sr,text,n){   // głos bez czasów liter (np. Gosia): głośność + samogłoski
+  const SH=lip.SH||{}, hop=Math.round(sr*.01), env=new Float32Array(n), out=new Uint8Array(n).fill(CLOSED);
+  for(let i=0;i<n;i++){ let a=0; const s=i*hop, e=Math.min(pcm.length,s+2*hop); for(let k=s;k<e;k++) a+=pcm[k]*pcm[k]; env[i]=Math.sqrt(a/Math.max(1,e-s)); }
+  const srt=Array.from(env).sort((a,b)=>a-b), p95=srt[Math.floor(.95*(n-1))]||1;
+  for(let i=0;i<n;i++){ const L=env[i]/p95; out[i]=L<.12?CLOSED:SH[L>.55?'open':L>.3?'mid':'slight']; }
+  return out;
+}
+function lipShapeAt(t){
+  for(const s of lip.segs){ if(t>=s.t0&&t<s.t0+s.dur){ const i=Math.floor((t-s.t0)/.01); return s.tl[Math.min(s.tl.length-1,i)]; } }
+  return null;   // poza mową
 }
 function lipFrame(){
   requestAnimationFrame(lipFrame);
-  const c=lip.ctx, W=lip.canvas.width, H=lip.canvas.height;
-  if(!lip.img){ return; }
+  const c=lip.ctx;
+  if(!lip.img) return;
   const v=front, onIdle=v.style.opacity==='1'&&byId.idle.src&&v.src.endsWith(byId.idle.src);
-  let target=0, shape=0;
-  if(lip.cur&&onIdle&&neural.ctx){
-    const at=neural.ctx.currentTime-lip.cur.t0+.045;           // obraz lekko wyprzedza dźwięk, jak u ludzi
-    if(at>=0&&at<lip.cur.dur){ target=1; shape=lip.cur.vis[Math.min(lip.cur.vis.length-1,Math.floor(at/.01))]; }
-    else if(at<0){ target=1; shape=0; }
+  let target=0, shape=lip.shB;
+  if(lip.segs.length&&onIdle&&neural.ctx){
+    const sh=lipShapeAt(neural.ctx.currentTime+.04);   // obraz wyprzedza dźwięk o 40 ms
+    if(sh!==null&&sh!==CLOSED){ target=1; shape=sh; }
   }
   const fi=Math.min(lip.track.length-1,Math.max(0,Math.round(v.currentTime*24))), tr=lip.track[fi];
   if(!tr||tr[3]<.5) target=0;
-  lip.alpha+=(target-lip.alpha)*(target>lip.alpha?.35:.2);
+  // domknięcie (m/b/p, pauza) szybko, otwieranie trochę łagodniej
+  lip.alpha+=(target-lip.alpha)*(target>lip.alpha?.55:.5);
   if(shape!==lip.shB){ lip.shA=lip.shB; lip.shB=shape; lip.mix=0; }
-  lip.mix=Math.min(1,lip.mix+.6);
+  lip.mix=Math.min(1,lip.mix+.55);
   if(lip.last){ c.clearRect(lip.last[0]-2,lip.last[1]-2,lip.last[2]+4,lip.last[3]+4); lip.last=null; }
   if(lip.alpha<.02||!tr) return;
   const m=lip.meta, s=tr[2], tw=m.tileW, th=m.tileH, dw=tw*s, dh=th*s, dx=tr[0]-dw/2, dy=tr[1]+m.offY*s-dh/2;
@@ -669,11 +781,13 @@ chatForm.addEventListener('submit',async e=>{
   if(!busy.v) setStatus('Słucha');
   try{
     const msgs=[{role:'user',content:persona()+'\n\n(Początek rozmowy.)'},{role:'assistant',content:'Rozumiem.'},...chatHistory.slice(-10)];
-    const r=await sampleFn(msgs,{modelTier:'quick',cache:false,signal:chatAbort.signal,onText:({text})=>{her.textContent=text;}});
+    const sp=speechStream(); let started=false;
+    const r=await sampleFn(msgs,{modelTier:'quick',cache:false,signal:chatAbort.signal,onText:({text})=>{
+      her.textContent=text; if(text&&text!=='Thinking...'){ if(!started&&!busy.v){ setStatus('Odpowiada'); started=true; } sp.push(text); } }});
     const ans=(r.text||'').trim()||'Przepraszam, nie usłyszałam. Możesz powtórzyć?';
     her.textContent=ans; chatHistory.push({role:'assistant',content:ans});
     if(!busy.v) setStatus('Odpowiada');
-    await say(ans);
+    await sp.end(ans);
   }catch(err){
     her.textContent=err&&err.code==='rate_limited'?'Za dużo pytań naraz. Spróbuj za chwilę.':err&&err.code==='not_granted'?'Rozmowa wymaga zgody na pytania do Claude.':'Nie udało się odpowiedzieć. Spróbuj jeszcze raz.';
     chatHistory.pop();

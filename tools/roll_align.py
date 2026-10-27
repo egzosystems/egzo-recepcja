@@ -60,7 +60,9 @@ for k, name in enumerate(meta['shapes']):
     print(name, 'przesunięcie', dx, dy, 'dopasowanie górnej wargi', round(sc[0], 3))
 cv2.imwrite(atlas_out, np.hstack(tiles))
 
-# 3) przechył klatka po klatce w pętli (względem kadru bazowego)
+# 3) przechył klatka po klatce w pętli (względem kadru bazowego) — pomijany, gdy zamiast toru podano „-”
+if tor_p == '-':
+    meta['roll0'] = r0; json.dump(meta, open(meta_p, 'w'), indent=1); sys.exit(0)
 tor = json.load(open(tor_p))
 tpl = gref[MY - 16:MY + 16, MX - 34:MX + 34]
 th, tw = tpl.shape

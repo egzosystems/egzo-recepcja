@@ -18,7 +18,7 @@ REF_MOUTH = (582, 227)
 PW, PH = 84, 60            # łatka w skali kadru bazowego
 OFF_Y = 7                  # łatka sięga niżej niż środek ust (żuchwa)
 # kształty: nazwa -> klatka w klipie powitania (wybrane ręcznie z montażu)
-SHAPES = {"rest": 46, "slight": 62, "mid": 72, "open": 54, "wide": 68, "o": 58, "o2": 76}
+SHAPES = {"rest": 46, "slight": 62, "mid": 72, "open": 54, "wide": 68, "o": 58, "o2": 76, "s": 50, "teeth": 80}
 
 # wzorzec nosa i górnej części ust z kadru bazowego (mało się zmienia przy mówieniu)
 NX0, NY0, NX1, NY1 = 556, 168, 610, 218

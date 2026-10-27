@@ -43,6 +43,18 @@
 - Mówi w spoczynku (tam śledzenie jest najdokładniejsze): podziękowanie przed sięgnięciem po kartkę, „gotowe” po powrocie, odpowiedzi w rozmowie.
 - Narzędzia: `tools/track_face.py`, `tools/mouth_atlas.py`, `tools/refine_lips.py`, `tools/roll_align.py` (z tego ostatniego używany wynik atlasu; kąt klatka po klatce okazał się zbędny — przechył w pętli jest stały).
 
+## Mowa i usta (wersja 4) — dokładne czasy głosek
+- Model Mai ma dodatkowe wyjście z czasem każdego znaku (`tools/eksport_czasow_liter.py`); suma czasów = długość dźwięku co do próbki.
+- Głoski z liter: dwuznaki (sz, cz, rz, ch, dz, dż, dź) i zmiękczenia (ci/si/zi/ni + samogłoska).
+- Kształty: m/b/p = prawdziwe, zamknięte usta z wideo (nakładka znika); a → open/mid; e → wide/slight; i/j → teeth/s; o/ą → o; u/ó/ł → mid; sz/cz/ż/rz/dż → o2; s/z/c/ś/ź/ć/dz/dź → s; f/w → slight; t/d/n/l/r/k/g/ch → od sąsiedniej samogłoski. Zaokrąglenie warg 50 ms przed o/u/sz. Siła otwarcia z głośności.
+- Spacje między słowami nie zamykają ust (chyba że obok m/b/p); interpunkcja > 70 ms i przerwy > 160 ms zamykają.
+- Atlas: 9 kształtów, maska zawężona (kąciki z prawdziwej twarzy — bez efektu „szerokiego uśmiechu”), zęby przygaszone o 14% (`tools/atlas_mask.py`).
+- Silnik mowy: zdania na osi czasu karty dźwiękowej, przycięta cisza na brzegach, pauza 0,26 s po kropce / 0,32 s po ?!, jedna synteza naraz z anulowaniem przerwanych wypowiedzi, odpowiedzi czatu mówione zdanie po zdaniu w trakcie dopływania tekstu.
+- Ochrona przed dziurami na wolnych urządzeniach: pomiar ms syntezy i sekund mowy na literę; jeśli kolejne zdania by nie zdążyły, start całej wypowiedzi jest opóźniony (max 3 s).
+- Testy: `tests/test_mowa.py` (oś czasu ust, przerwy, strumień, zrzuty), `tests/test_wolne_urzadzenie.py` (procesor 4× wolniejszy). Serwer: `python3 tools/serwer_testowy.py . 8768`.
+- Wyniki (2026-10-27): m/b/p zawsze zamknięte, „a” zawsze otwarte; przerwy między zdaniami 0,26 s; zero spóźnień syntezy przy normalnej prędkości; przy 4× wolniejszym procesorze start po ~2 s, potem bez dziur.
+- Arkusz z minami i ustami od właściciela: kształty ust nie pasują do jej twarzy (inne usta, kolor, skala) — użyte tylko jako lista brakujących kształtów; miny i obroty głowy wymagają klipów Veo.
+
 ## Plan
 1. Ujęcia obiegu: 05 odczyt, 06 analiza, 08 segregowanie, 12 odłożenie (prompty w `docs/ujecia.md`).
 2. Poprawki logo na ścianie → nowy kadr bazowy (wtedy klipy generujemy już z niego).

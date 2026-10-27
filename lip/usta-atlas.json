@@ -9,7 +9,9 @@
   "open",
   "wide",
   "o",
-  "o2"
+  "o2",
+  "s",
+  "teeth"
  ],
  "meta": [
   {
@@ -53,7 +55,20 @@
    "frame": 76,
    "score": 0.688,
    "scale": 0.92
+  },
+  {
+   "name": "s",
+   "frame": 50,
+   "score": 0.776,
+   "scale": 0.92
+  },
+  {
+   "name": "teeth",
+   "frame": 80,
+   "score": 0.718,
+   "scale": 0.92
   }
  ],
- "roll0": -9.5
+ "roll0": -9.5,
+ "maskRX": 27.0
 }

@@ -4,11 +4,12 @@
  * Model pobierany w częściach, po pierwszym razie trzymany w IndexedDB.
  *
  * Wiadomości:  {type:'init',voice} -> {type:'progress',loaded,total,cached} ... {type:'ready'} | {type:'error',message}
- *              {type:'speak',id,text,rate} -> {type:'audio',id,pcm,sampleRate} | {type:'error',id,message}
+ *              {type:'speak',id,text,rate} -> {type:'audio',id,pcm,dur,chars,hop,ms,sampleRate} | {type:'error',id,message}
+ *              dur/chars: czas (w ramkach hop) każdego znaku wejścia, także pustych przerw „_” — do synchronizacji ust
  */
 const BASE = self.location.href.replace(/[^/]*$/, '');
 const VOICES = {
-  mai:   { key: 'mai-female-v1', parts: 6, file: i => 'mai-' + i + '.bin.wasm', sr: 22050, noise: 0.45, length: 1.15, noiseW: 0.6, kind: 'graphemes' },
+  mai:   { key: 'mai-female-v2-dur', parts: 6, file: i => 'mai-' + i + '.bin.wasm', sr: 22050, noise: 0.45, length: 1.15, noiseW: 0.6, kind: 'graphemes' },
   gosia: { key: 'gosia-medium-v1', parts: 5, file: i => 'gosia-' + i + '.bin.wasm', sr: 22050, noise: 0.45, length: 1.15, noiseW: 0.6, kind: 'phonemes' },
 };
 let V = null, session = null, initP = null, tokens = null, phWasm = null, phData = null;
@@ -76,12 +77,12 @@ async function init(voice) {
 }
 
 function graphemeIds(text) {
-  const blank = tokens.get('<BLNK>'); const ids = [];
+  const blank = tokens.get('<BLNK>'); const ids = [], chars = [];
   for (const ch of text.toLowerCase().replace(/\s+/g, ' ')) {
-    if (tokens.has(ch)) { ids.push(blank, tokens.get(ch)); }
+    if (tokens.has(ch)) { ids.push(blank, tokens.get(ch)); chars.push('_', ch); }
   }
-  ids.push(blank);
-  return ids;
+  ids.push(blank); chars.push('_');
+  return { ids, chars };
 }
 
 async function phonemeIds(text) {
@@ -94,7 +95,9 @@ async function phonemeIds(text) {
 const i64 = a => new ort.Tensor('int64', BigInt64Array.from(a.map(BigInt)), [a.length]);
 
 async function synth(text, rate) {
-  const ids = V.kind === 'graphemes' ? graphemeIds(text) : await phonemeIds(text);
+  let ids, chars = null;
+  if (V.kind === 'graphemes') { const g = graphemeIds(text); ids = g.ids; chars = g.chars; }
+  else ids = await phonemeIds(text);
   if (!ids || ids.length < 3) throw new Error('Pusty tekst.');
   const feeds = {
     input: new ort.Tensor('int64', BigInt64Array.from(ids.map(BigInt)), [1, ids.length]),
@@ -103,11 +106,15 @@ async function synth(text, rate) {
   };
   if (session.inputNames.includes('sid')) feeds.sid = i64([0]);
   if (session.inputNames.includes('langid')) feeds.langid = i64([0]);
+  const t0 = performance.now();
   const res = await session.run(feeds);
-  const pcm = new Float32Array(res[session.outputNames[0]].data);
+  const pcm = new Float32Array(res['output'].data);
+  // czasy znaków (ramki po 256 próbek) — wyjście dodane do modelu Mai
+  const durT = res['/Ceil_output_0'];
+  const dur = durT ? Float32Array.from(durT.data) : null;
   let peak = 0; for (let i = 0; i < pcm.length; i++) peak = Math.max(peak, Math.abs(pcm[i]));
   if (peak > 0) { const g = 0.8 / peak; for (let i = 0; i < pcm.length; i++) pcm[i] *= g; }
-  return pcm;
+  return { pcm, dur, chars, hop: 256, ms: performance.now() - t0 };
 }
 
 self.onmessage = async e => {
@@ -115,11 +122,18 @@ self.onmessage = async e => {
   if (m.type === 'init') {
     try { initP = initP || init(m.voice); await initP; postMessage({ type: 'ready' }); }
     catch (err) { initP = null; postMessage({ type: 'error', message: String(err && err.message || err) }); }
+  } else if (m.type === 'cancel') {
+    cancelUpTo = Math.max(cancelUpTo, m.upTo || 0);
   } else if (m.type === 'speak') {
-    try {
-      await initP;
-      const pcm = await synth(m.text, m.rate);
-      postMessage({ type: 'audio', id: m.id, pcm, sampleRate: V.sr }, [pcm.buffer]);
-    } catch (err) { postMessage({ type: 'error', id: m.id, message: String(err && err.message || err) }); }
+    // jedna synteza naraz (sesja ONNX nie obsługuje równoległych wywołań); przerwane wypowiedzi pomijane
+    chain = chain.then(async () => {
+      if (m.id <= cancelUpTo) { postMessage({ type: 'error', id: m.id, message: 'anulowano' }); return; }
+      try {
+        await initP;
+        const r = await synth(m.text, m.rate);
+        postMessage({ type: 'audio', id: m.id, pcm: r.pcm, dur: r.dur, chars: r.chars, hop: r.hop, ms: r.ms, sampleRate: V.sr }, [r.pcm.buffer]);
+      } catch (err) { postMessage({ type: 'error', id: m.id, message: String(err && err.message || err) }); }
+    });
   }
 };
+let chain = Promise.resolve(), cancelUpTo = 0;
