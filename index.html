@@ -102,6 +102,7 @@ input[type=range]{accent-color:var(--gold);width:100%}
 @media (max-width:700px){.subtitle{display:none}}
 .iconbtn+.iconbtn{margin-left:0}
 .chat{display:grid;gap:8px}
+.obsbtn{margin-left:0;justify-self:start}
 .chat-log{display:grid;gap:6px;max-height:220px;overflow:auto;font-size:13px}
 .chat-log:empty{display:none}
 .msg{padding:6px 9px;border-radius:3px;max-width:92%;line-height:1.4;overflow-wrap:anywhere}
@@ -183,6 +184,7 @@ input[type=range]{accent-color:var(--gold);width:100%}
       <div class="chat-log" id="chatLog"></div>
       <form id="chatForm"><input type="text" id="chatIn" placeholder="Np. co czeka na akceptację?" autocomplete="off"><button class="btn pri" type="submit">Wyślij</button></form>
       <div class="hint" id="chatHint">Odpowiada na głos, gdy głos jest włączony.</div>
+      <button class="iconbtn obsbtn" id="obsBtn" type="button" hidden>Zapisz dzisiejszą rozmowę do Obsidiana (.md)</button>
     </div>
     <div class="box events">
       <h2>Ona sama powie</h2>
@@ -1033,6 +1035,72 @@ let sampleFn=null;
 (async()=>{ try{ sampleFn=await window.claude?.use?.('sample'); }catch(e){} if(!sampleFn){ document.getElementById('chatHint').textContent='Rozmowa działa po otwarciu strony w Claude.'; chatIn.disabled=true; chatForm.querySelector('button').disabled=true; } })();
 function addMsg(who,t){const d=document.createElement('div');d.className='msg '+who;d.textContent=t;chatLog.appendChild(d);chatLog.scrollTop=chatLog.scrollHeight;return d;}
 chatHistory.forEach(m=>addMsg(m.role==='user'?'me':'her',m.content));
+
+/* ---------- Historia rozmów: baza strony (wspólna dla telefonu i komputera, tylko dla właściciela)
+   + kopia w przeglądarce. Jeden dokument na dzień: rozmowy/RRRR-MM-DD {dzien, wiadomosci:[{role,content,t}]}.
+   Pole eksportDo (liczba wiadomości przeniesionych do Obsidiana) ustawia eksport — strona go nie nadpisuje. ---------- */
+const hist={db:null,stan:'lokalna',unsub:null};
+const dzien=(t=Date.now())=>{ const d=new Date(t); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); };
+function renderChat(){ chatLog.textContent=''; chatHistory.forEach(m=>addMsg(m.role==='user'?'me':'her',m.content)); }
+function mergeMsgs(a,b){ const seen=new Map(); [...a,...b].forEach(m=>{ if(!m||!m.content) return; const k=(m.t||0)+'|'+m.role+'|'+String(m.content).slice(0,60); if(!seen.has(k)) seen.set(k,m); });
+  return [...seen.values()].sort((x,y)=>(x.t||0)-(y.t||0)); }
+function setHist(list){ chatHistory.splice(0,chatHistory.length,...list.slice(-40)); store('egzo-rozmowa',chatHistory.slice(-40)); renderChat(); }
+async function histInit(){
+  let db=null; try{ db=await window.claude?.use?.('db'); }catch(e){}
+  if(!db) return;
+  const col=db.collection('rozmowy');
+  try{
+    const snap=await col.orderBy('dzien','desc').limit(3).get();
+    let msgs=[]; snap.docs.forEach(d=>{ msgs=msgs.concat((d.data()||{}).wiadomosci||[]); });
+    hist.db=db; hist.stan='baza';
+    // jednorazowo: rozmowy zapisane wcześniej tylko w tej przeglądarce trafiają do bazy
+    const local=chatHistory.filter(m=>m&&m.content);
+    if(local.length&&!store('egzo-rozmowa-w-bazie')){
+      const t0=Date.now()-local.length*1000; const withT=local.map((m,i)=>({role:m.role,content:m.content,t:m.t||t0+i*1000}));
+      await histSave(withT); msgs=mergeMsgs(msgs,withT); }
+    store('egzo-rozmowa-w-bazie',1);
+    setHist(mergeMsgs(msgs,chatHistory.filter(m=>m.t)));
+    document.getElementById('chatHint').textContent='Odpowiada na głos, gdy głos jest włączony. Historia zapisuje się na wszystkich Twoich urządzeniach.';
+    // na żywo: wiadomości napisane na drugim urządzeniu
+    hist.unsub=col.doc(dzien()).onSnapshot(s=>{ if(!s.exists||chatBusy) return; const m=mergeMsgs(chatHistory,(s.data()||{}).wiadomosci||[]); if(m.length!==chatHistory.length) setHist(m); },()=>{});
+  }catch(e){ console.warn('historia:',e&&e.code); }
+}
+let histQ=Promise.resolve();
+function histSave(newMsgs){   // zapisy po kolei (jeden naraz na dokument), scalanie z tym, co zapisało inne urządzenie
+  return histQ=histQ.then(async()=>{
+    if(!hist.db) return;
+    const byDay={}; newMsgs.forEach(m=>{ (byDay[dzien(m.t)]=byDay[dzien(m.t)]||[]).push(m); });
+    for(const [id,list] of Object.entries(byDay)){
+      const ref=hist.db.collection('rozmowy').doc(id);
+      for(let a=0;a<2;a++){ try{
+        const s=await ref.get(), cur=s.exists?((s.data()||{}).wiadomosci||[]):[];
+        const all=mergeMsgs(cur,list).map(m=>({role:m.role,content:String(m.content).slice(0,4000),t:m.t}));
+        if(s.exists) await ref.update({wiadomosci:all}); else await ref.set({dzien:id,wiadomosci:all});
+        break;
+      }catch(e){ if(e&&e.code==='unavailable'&&a===0){ await wait(400+Math.random()*600); continue; } console.warn('historia zapis:',e&&e.code); break; } }
+    }
+  }).catch(()=>{});
+}
+histInit();
+// notatka Obsidiana z rozmowy jednego dnia (plik .md do wrzucenia do vaulta „EGZO SEJF”)
+function rozmowaMd(id,list){
+  const d=new Date(id+'T12:00:00'), tytul=d.toLocaleDateString('pl-PL',{day:'numeric',month:'long',year:'numeric'});
+  const linie=list.map(m=>`**${new Date(m.t).toTimeString().slice(0,5)} ${m.role==='user'?'Ty':'Asystentka'}:** ${String(m.content).replace(/\n+/g,' ')}`);
+  return `---\ndata: ${id}\ntyp: rozmowa\nzrodlo: Recepcja EGZO\ntags: [asystentka, rozmowa]\n---\n# Rozmowa z asystentką — ${tytul}\n\n${linie.join('\n\n')}\n`;
+}
+(async()=>{ let dl=null; try{ dl=await window.claude?.use?.('downloads'); }catch(e){} if(!dl) return;
+  const b=document.getElementById('obsBtn'); b.hidden=false;
+  b.onclick=async()=>{
+    // najnowszy dzień, w którym była rozmowa (pełna lista z bazy, jeśli jest)
+    const ostatni=chatHistory.filter(m=>m.t).slice(-1)[0]; const id=dzien(ostatni?ostatni.t:Date.now());
+    let list=chatHistory.filter(m=>m.t&&dzien(m.t)===id);
+    if(hist.db){ try{ const s=await hist.db.collection('rozmowy').doc(id).get(); if(s.exists) list=mergeMsgs(list,(s.data()||{}).wiadomosci||[]); }catch(e){} }
+    if(!list.length){ b.textContent='Brak rozmowy do zapisania'; setTimeout(()=>b.textContent='Zapisz dzisiejszą rozmowę do Obsidiana (.md)',2500); return; }
+    try{ await dl.save({filename:`Rozmowa z asystentką ${id}.md`,data:rozmowaMd(id,list)}); b.textContent='Zapisano — przenieś plik do EGZO SEJF'; }
+    catch(e){ if(e&&e.code==='unavailable'){ b.hidden=true; return; } if(e&&e.code!=='declined') b.textContent='Nie udało się zapisać'; }
+    setTimeout(()=>b.textContent='Zapisz dzisiejszą rozmowę do Obsidiana (.md)',4000);
+  };
+})();
 function persona(){
   const lista=docs.map(d=>`- ${d.name} (${d.s.toLowerCase()}${d.ex?', przykład':''})`).join('\n')||'- brak';
   const tresc=sel&&sel.text?`\n\nTreść ostatnio wybranego dokumentu (${sel.name}), fragment:\n${sel.text.slice(0,1500)}`:'';
@@ -1055,11 +1123,14 @@ let chatAbort=null;
 chatForm.addEventListener('submit',async e=>{
   e.preventDefault(); const q=chatIn.value.trim(); if(!q||!sampleFn||chatBusy) return;
   chatBusy=true;
-  chatIn.value=''; addMsg('me',q); chatHistory.push({role:'user',content:q});
+  chatIn.value=''; addMsg('me',q); const uMsg={role:'user',content:q,t:Date.now()}; chatHistory.push(uMsg);
   const her=addMsg('her','…'); chatAbort?.abort(); chatAbort=new AbortController();
   if(!busy.v) setStatus('Słucha');
   try{
-    const msgs=[{role:'user',content:persona()+'\n\n(Początek rozmowy.)'},{role:'assistant',content:'Rozumiem.'},...chatHistory.slice(-10)];
+    // kontekst: ostatnie wiadomości (także z innych dni i urządzeń), naprzemiennie, kończąc na pytaniu
+    const ctxMsgs=[]; for(const m of chatHistory.slice(-12)){ const r=m.role==='user'?'user':'assistant'; if(ctxMsgs.length&&ctxMsgs[ctxMsgs.length-1].role===r) ctxMsgs[ctxMsgs.length-1].content+='\n'+m.content; else ctxMsgs.push({role:r,content:m.content}); }
+    while(ctxMsgs.length&&ctxMsgs[0].role!=='user') ctxMsgs.shift();
+    const msgs=[{role:'user',content:persona()+'\n\n(Początek rozmowy.)'},{role:'assistant',content:'Rozumiem.'},...ctxMsgs];
     const sp=mowa.strumien(); let started=false;
     let canTools=false; try{ canTools=!!(await sampleFn.limits?.())?.tools; }catch(e){}
     const tools=canTools&&mail.mcp&&mail.state==='on'?[
@@ -1075,7 +1146,7 @@ chatForm.addEventListener('submit',async e=>{
     const r=await sampleFn(msgs,{modelTier:'quick',cache:false,tools,signal:chatAbort.signal,onText:({text})=>{
       her.textContent=text; if(text&&text!=='Thinking...'){ if(!started&&!busy.v){ setStatus('Odpowiada'); started=true; } sp.dodaj(text); } }});
     const ans=(r.text||'').trim()||'Przepraszam, nie usłyszałam. Możesz powtórzyć?';
-    her.textContent=ans; chatHistory.push({role:'assistant',content:ans}); store('egzo-rozmowa',chatHistory.slice(-20));
+    her.textContent=ans; const aMsg={role:'assistant',content:ans,t:Date.now()}; chatHistory.push(aMsg); store('egzo-rozmowa',chatHistory.slice(-40)); histSave([uMsg,aMsg]);
     if(!busy.v) setStatus('Odpowiada');
     await sp.zakoncz(ans);
   }catch(err){

@@ -141,6 +141,12 @@ Nowy test `tests/test_realizm.py` mierzy na tym, co faktycznie słychać i wida�
 - Biblioteka: 365 klatek + 1061 wirtualnych (380 KB); wczytanie na wolnym telefonie 1,25 s, najdłuższa blokada 114 ms.
 - `tests/uruchom_wszystkie.sh` — cały zestaw jednym poleceniem.
 
+## Trwała historia rozmów (wersja 15)
+- Rozmowy zapisują się w bazie strony (`db`), kolekcja `rozmowy`, jeden dokument na dzień `RRRR-MM-DD` {dzien, wiadomosci:[{role, content, t}]}; reguła: odczyt i zapis tylko właściciel. Wspólne dla telefonu i komputera; dzisiejszy dokument słuchany na żywo (wiadomość z drugiego urządzenia pojawia się od razu).
+- Kontekst dla niej: ostatnie 12 wiadomości (także z poprzednich dni), więc pamięta wcześniejsze rozmowy. Wcześniejsza historia z przeglądarki przenoszona do bazy raz. Kopia w przeglądarce zostaje jako zapas.
+- Przycisk „Zapisz dzisiejszą rozmowę do Obsidiana (.md)”: notatka z nagłówkiem (data, typ, tagi) i wpisami z godzinami, do wrzucenia do vaulta EGZO SEJF.
+- Automatyczny zapis do vaulta (E:\EGZO SEJF) wymaga udostępnienia folderu tej sesji/zadaniu — wniosek o dostęp z sesji został zablokowany przez zabezpieczenie; do decyzji właściciela.
+
 ## Plan
 1. Ujęcia obiegu: 05 odczyt, 06 analiza, 08 segregowanie, 12 odłożenie (prompty w `docs/ujecia.md`).
 2. Poprawki logo na ścianie → nowy kadr bazowy (wtedy klipy generujemy już z niego).
