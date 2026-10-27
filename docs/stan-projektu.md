@@ -127,6 +127,20 @@
 - Przy okazji: obrót nakładki względem twarzy 0,1° (było 2°), szew 4,6 (było 10); otwarte usta p90 2,3°.
 - Pozostałe testy przechodzą: otwieranie ust w 9 miejscach, mowa 10/10, wolne urządzenie (4×: 37 kl/s, dobór 37 ms/zdanie), zdarzenia, telefon.
 
+## Realizm mowy — pomiary i poprawki (wersja 14)
+Nowy test `tests/test_realizm.py` mierzy na tym, co faktycznie słychać i widać. Wnioski i poprawki:
+| miara | przed | po | co zmieniono |
+|---|---|---|---|
+| ostrość warg (nakładka/wideo) | 0,58 | 0,96–1,02 | twarde przełączanie klatek kolejnych w nagraniu, krótkie przenikanie (20% kroku) tylko przy skokach; wyostrzenie biblioteki (strata 30% przy przeliczaniu obrazu); wygładzanie wysokiej jakości |
+| drgania (ruch niewymagany przez mowę, > 8 Hz) | 0,12–0,15 | 0,09 | cel jako gładka fala przez środki głosek; klatki pośrednie wypełniające dziurę otwarcia 0,3–0,5 |
+| rytm (widoczne cykle / cykle w mowie) | ~0,6 | 0,80–0,86 | spółgłoski między samogłoskami mocniej przymykają usta |
+| synchronizacja | usta −35 ms przed głosem | −30…−40 ms | bez zmian (naturalne) |
+| otwarcie a/o/e · m/b/p | 0,8 · 0,1 | 0,87 · 0,12 | bez zmian |
+| migotanie skóry | 0,59 | 0,48 | — |
+- Obalona hipoteza: liczba skoków między klatkami nie zwiększa migotania — ograniczanie skoków tylko zmniejszało widoczność sylab.
+- Biblioteka: 365 klatek + 1061 wirtualnych (380 KB); wczytanie na wolnym telefonie 1,25 s, najdłuższa blokada 114 ms.
+- `tests/uruchom_wszystkie.sh` — cały zestaw jednym poleceniem.
+
 ## Plan
 1. Ujęcia obiegu: 05 odczyt, 06 analiza, 08 segregowanie, 12 odłożenie (prompty w `docs/ujecia.md`).
 2. Poprawki logo na ścianie → nowy kadr bazowy (wtedy klipy generujemy już z niego).

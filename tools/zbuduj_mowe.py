@@ -143,6 +143,35 @@ for p in extra:
         if n < 0.85: continue
         mx, my = T @ np.float32([MX, MY, 1]); c = crop_of(fr, T); o, t = features(c)
         frames.append(dict(src=os.path.basename(p), i=i, open=o, teeth=t, crop=c, poza=project(fr, mx, my)))
+# --- 3b) UZUPEŁNIENIE OTWARCIA: nagranie otwiera i zamyka usta w 2–3 klatkach, więc brak ust półotwartych
+# (pomiar: w prostej pozie dziura 0,3–0,5 → usta przeskakiwały między „prawie zamknięte” a „otwarte”).
+# Dla sąsiednich klatek pętli z dużą zmianą otwarcia liczymy klatki pośrednie z przepływu optycznego (DIS);
+# ruch między sąsiednimi klatkami tego samego nagrania jest mały, więc interpolacja jest wiarygodna.
+dis = cv2.DISOpticalFlow_create(cv2.DISOPTICAL_FLOW_PRESET_MEDIUM)
+gx, gy = np.meshgrid(np.arange(TW, dtype=np.float32), np.arange(TH, dtype=np.float32))
+def tween(a, b, t):
+    ga, gb = cv2.cvtColor(a, cv2.COLOR_BGR2GRAY), cv2.cvtColor(b, cv2.COLOR_BGR2GRAY)
+    fab, fba = dis.calc(ga, gb, None), dis.calc(gb, ga, None)
+    wa = cv2.remap(a, gx - t * fab[..., 0], gy - t * fab[..., 1], cv2.INTER_CUBIC, borderMode=cv2.BORDER_REPLICATE)
+    wb = cv2.remap(b, gx - (1 - t) * fba[..., 0], gy - (1 - t) * fba[..., 1], cv2.INTER_CUBIC, borderMode=cv2.BORDER_REPLICATE)
+    return np.clip((1 - t) * wa.astype(np.float32) + t * wb.astype(np.float32), 0, 255).astype(np.uint8)
+all_open = []
+for i in range(len(idle)):
+    all_open.append(features(crop_of(idle[i][2], Ts[i]))[0])
+omax0 = max(1.0, np.percentile(all_open, 98)); n_tw = 0; odd_done = set()
+for i in range(len(idle) - 1):
+    d_open = abs(all_open[i + 1] - all_open[i]) / omax0
+    if d_open < 0.12 or nin[i] < 0.85 or nin[i + 1] < 0.85: continue
+    ca, cb = crop_of(idle[i][2], Ts[i]), crop_of(idle[i + 1][2], Ts[i + 1])
+    k = int(math.ceil(d_open / 0.08))
+    for s in range(1, k + 1):
+        t = s / (k + 1); c = tween(ca, cb, t); o, te = features(c)
+        frames.append(dict(src='posrednie', i=i * 100 + s, open=o, teeth=te, crop=c, poza=(1 - t) * Pi[i] + t * Pi[i + 1])); n_tw += 1
+    for j in (i, i + 1):   # klatki nieparzyste przy przejściach też się przydają
+        if j % STEP and j not in odd_done:
+            odd_done.add(j); c = crop_of(idle[j][2], Ts[j]); o, te = features(c)
+            frames.append(dict(src='posrednie', i=j * 100, open=o, teeth=te, crop=c, poza=Pi[j])); n_tw += 1
+print('klatki pośrednie (przejścia otwarcia):', n_tw)
 omax = max(1.0, np.percentile([f['open'] for f in frames], 98)); tmax = max(1.0, np.percentile([f['teeth'] for f in frames], 98))
 idx = {(f['src'], f['i']): n for n, f in enumerate(frames)}
 nxt = [idx.get((f['src'], f['i'] + (STEP if f['src'] == os.path.basename(idle_p) else 1)), -1) for f in frames]
@@ -169,7 +198,7 @@ for a in range(0, len(idle), ANCHOR_STEP):
     dst = crop_of(idle[a][2], Ts[a]); gd = g_(dst)
     lab_a = cv2.cvtColor(dst, cv2.COLOR_BGR2LAB).astype(np.float32)[ringM].mean(0)
     for k, f in enumerate(frames):
-        if f['fo'] < 0.3 or d[k] <= POSE_LIMIT: continue
+        if f['fo'] < 0.25 or d[k] <= POSE_LIMIT: continue
         try:
             cc, W = cv2.findTransformECC(gd, g_(f['crop']), np.eye(2, 3, dtype=np.float32), cv2.MOTION_AFFINE,
                                          (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 300, 1e-6), regM, 3)
@@ -190,6 +219,12 @@ for k, labs in used.items():
 vidx = {(v['k'], v['a']): n for n, v in enumerate(virt)}
 vnext = [vidx.get((nxt[v['k']], v['a']), -1) if nxt[v['k']] >= 0 else -1 for v in virt]
 print(f'przeniesione otwarte usta: {len(virt)} klatek wirtualnych w {len(set(v["a"] for v in virt))} kotwicach | korekta kąta {min(v["rot"] for v in virt):+.1f}…{max(v["rot"] for v in virt):+.1f}°' if virt else 'przeniesione otwarte usta: brak')
+# wyostrzenie: wyrównanie, kompresja i rysowanie z obrotem zabierają wargom ok. 30% ostrości
+# (zmierzone: tests/test_realizm.py, „ostrość”); lekka maska wyostrzająca przywraca ostrość wideo
+SHARP_A, SHARP_S = 0.5, 0.8
+for f in frames:
+    b = cv2.GaussianBlur(f['crop'].astype(np.float32), (0, 0), SHARP_S)
+    f['crop'] = np.clip(f['crop'].astype(np.float32) * (1 + SHARP_A) - b * SHARP_A, 0, 255).astype(np.uint8)
 cols = 16; rows = (len(frames) + cols - 1) // cols
 grid = np.zeros((rows * TH, cols * TW, 4), np.uint8)
 for n, f in enumerate(frames):

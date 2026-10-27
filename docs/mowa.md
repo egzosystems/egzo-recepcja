@@ -8,7 +8,8 @@ pozy) woła tylko `mowa.powiedz(...)` i nie musi nic wiedzieć o syntezie ani o 
 - Wbudowanie w stronę: `python3 tools/zbuduj_strone.py ŚCIEŻKA/egzo-recepcja.html --repo index.html`
   (artefakt nie pozwala na osobne skrypty, więc moduł jest wklejany między `/*<mowa>*/` i `/*</mowa>*/`)
 - Dane ust: `python3 -I tools/zbuduj_mowe.py KADR.jpg PĘTLA.mp4 lip/ [KLIP_MÓWIENIA.mp4 …]`
-- Testy (serwer testowy na porcie 8768):
+- Testy (serwer testowy na porcie 8768), wszystkie naraz: `tests/uruchom_wszystkie.sh`:
+  - `tests/test_realizm.py` — ostrość warg, drgania, rytm sylab, synchronizacja, migotanie, otwarcie a/o/e i m/b/p
   - `tests/test_mowa.py` — 10 sprawdzeń interfejsu (m/b/p, „a”, pauzy, strumień, zdarzenia, stop)
   - `tests/test_kat_ust.py` — kąt ust w całej pętli podczas mowy: ta sama klatka z nakładką i bez;
     kąt zamkniętych ust średnio ≤ 1,5° (p90 ≤ 2,5°), oś otwartych ust p90 ≤ 7°, maks ≤ 9°
@@ -77,7 +78,12 @@ EgzoMowa.mowione('12,5%')   // tekst w postaci do czytania na głos
 7. **Broda i żuchwa.** Nakładka obejmuje tylko usta z najbliższym otoczeniem; kontur brody zawsze pochodzi z wideo.
    Warstwa żuchwy rozciąga brodę z wideo w pionie od linii ust o 5 px × (otwarcie nakładki − otwarcie ust w wideo),
    z bezwładnością — broda opada przy „a”, unosi się przy „m”, gdy w wideo usta są uchylone.
-8. **Krótkie głoski.** m/b/p krótsze niż krok ust (40 ms) dostają gwarantowany krok z domkniętymi ustami,
+8. **Realizm ruchu** (pomiary `tests/test_realizm.py`): cel otwarcia to gładka fala przez środki głosek
+   (samogłoska = szczyt, spółgłoska = dołek); klatki kolejne w nagraniu przełączane twardo jak w wideo,
+   skoki z krótkim przenikaniem (20% kroku) — długie przenikanie dawało podwójny kontur i rozmyte wargi;
+   biblioteka wyostrzona (przeliczanie obrazu zabiera ~30% ostrości); klatki pośrednie z przepływu optycznego
+   uzupełniają usta półotwarte, których nagranie nie ma. Parametry w `CFG` (moduł), do strojenia testem.
+9. **Krótkie głoski.** m/b/p krótsze niż krok ust (40 ms) dostają gwarantowany krok z domkniętymi ustami,
    a „a”/„o” — z otwartymi; te kroki mają większą wagę przy doborze.
 
 ## Dodawanie nowych umiejętności

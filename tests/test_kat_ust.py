@@ -62,14 +62,14 @@ with sync_playwright() as p:
         pg.evaluate(f"()=>{{ mowa.powiedz({json.dumps(zdania[n % 4])}); }}")
         pg.wait_for_timeout(450)
         got = 0
-        for k in range(45):
+        for k in range(75):
             r = pg.evaluate(GRAB)
             if r:
                 im = cv2.imdecode(np.frombuffer(base64.b64decode(r['img'].split(',')[1]), np.uint8), cv2.IMREAD_COLOR)
                 path = f'{OUT}/kat_{n:02d}_{k:02d}.png'; cv2.imwrite(path, im)
                 samples.append(dict(r, img=path, pos=pos)); got += 1
-                if got >= 16: break
-            pg.wait_for_timeout(130)
+                if got >= 26: break
+            pg.wait_for_timeout(90)
         for i in range(40):
             pg.wait_for_timeout(250)
             if pg.evaluate("()=>!mowa.zajeta"): break
