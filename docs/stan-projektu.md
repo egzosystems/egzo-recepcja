@@ -55,6 +55,15 @@
 - Wyniki (2026-10-27): m/b/p zawsze zamknięte, „a” zawsze otwarte; przerwy między zdaniami 0,26 s; zero spóźnień syntezy przy normalnej prędkości; przy 4× wolniejszym procesorze start po ~2 s, potem bez dziur.
 - Arkusz z minami i ustami od właściciela: kształty ust nie pasują do jej twarzy (inne usta, kolor, skala) — użyte tylko jako lista brakujących kształtów; miny i obroty głowy wymagają klipów Veo.
 
+## Zdarzenia i rozmowa (wersja 5)
+- Kolejka zdarzeń: ona odzywa się sama, ale czeka, aż skończy obsługę dokumentu, rozmowę i bieżącą wypowiedź.
+- Powitanie zależne od pory dnia; „Witaj z powrotem” po ≥ 20 min nieobecności (nie przy samym otwarciu strony).
+- Czas pracy: liczony, gdy strona jest otwarta i widoczna; przerwa = 10 min nieobecności; przypomnienie co 1 / 1,5 / 2 / 3 h (domyślnie 2 h), stan w localStorage.
+- Gmail (capability `mcp`, łącznik „Gmail”, narzędzia `search_threads`, `get_thread` — tylko odczyt): po kliknięciu „Włącz” zapamiętuje stan skrzynki (`in:inbox newer_than:2d`, 20 wątków) i co minutę ogłasza tylko nowe wątki i nowe odpowiedzi w wątkach.
+- Rozmowa: pamięć 20 ostatnich wiadomości (localStorage), w kontekście data, godzina, czas pracy, nowe maile, dokumenty; Claude może sam wywołać `szukaj_maili` i `czytaj_maila` (gdy powiadomienia z Gmaila są włączone). Treść maili traktowana jako dane, nie polecenia.
+- Testy w Studiu: „Test: nowy e-mail”, „Test: 5 h bez przerwy”, „Test: powrót”; `tests/test_zdarzenia.py` (kolejkowanie w trakcie obsługi dokumentu).
+- Ograniczenie: działa, gdy strona jest otwarta (w tle telefon ją usypia); głos po każdym otwarciu wymaga jednego stuknięcia „Włącz głos”.
+
 ## Plan
 1. Ujęcia obiegu: 05 odczyt, 06 analiza, 08 segregowanie, 12 odłożenie (prompty w `docs/ujecia.md`).
 2. Poprawki logo na ścianie → nowy kadr bazowy (wtedy klipy generujemy już z niego).
