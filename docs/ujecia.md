@@ -20,9 +20,9 @@ She holds the white sheet of paper in her right robotic hand at the start and at
 | 01 | Pozycja bazowa | ✅ pętla tam-i-z-powrotem | `media/egzo-idle_2026-10-27.mp4` |
 | 02 | Powitanie / mowa | ✅ sklejone z domknięciem | `media/egzo-powitanie_2026-10-27.mp4` |
 | 03 | Słuchanie | do zrobienia | |
-| 04 | Przyjęcie pliku | ✅ 20 s z Veo + domknięcie; zawiera też czytanie | `media/egzo-przyjecie-odczyt_2026-10-27.mp4` |
+| 04 | Przyjęcie pliku | ✅ obieg 1: 30 s z Veo, analiza cofnięta od 25 s + domknięcie | `media/egzo-obieg-1_2026-10-27.mp4` |
 | 05 | Odczyt dokumentu | ✅ zawarte w 04 (od 10,4 s) | |
-| 06 | Analiza | **następne** | |
+| 06 | Analiza | ✅ zawarte w 04 (od 21,2 s) | |
 | 07 | Przeglądanie | do zrobienia | |
 | 08 | Segregowanie (W TRAKCIE) | **następne** | |
 | 09 | Potwierdzenie | do zrobienia | |
