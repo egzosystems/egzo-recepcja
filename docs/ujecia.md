@@ -20,8 +20,8 @@ She holds the white sheet of paper in her right robotic hand at the start and at
 | 01 | Pozycja bazowa | ✅ pętla tam-i-z-powrotem | `media/egzo-idle_2026-10-27.mp4` |
 | 02 | Powitanie / mowa | ✅ sklejone z domknięciem | `media/egzo-powitanie_2026-10-27.mp4` |
 | 03 | Słuchanie | do zrobienia | |
-| 04 | Przyjęcie pliku | ✅ sklejone z domknięciem | `media/egzo-przyjecie_2026-10-27.mp4` |
-| 05 | Odczyt dokumentu | **następne** | |
+| 04 | Przyjęcie pliku | ✅ 20 s z Veo + domknięcie; zawiera też czytanie | `media/egzo-przyjecie-odczyt_2026-10-27.mp4` |
+| 05 | Odczyt dokumentu | ✅ zawarte w 04 (od 10,4 s) | |
 | 06 | Analiza | **następne** | |
 | 07 | Przeglądanie | do zrobienia | |
 | 08 | Segregowanie (W TRAKCIE) | **następne** | |
@@ -32,6 +32,8 @@ She holds the white sheet of paper in her right robotic hand at the start and at
 | 13 | Powrót do pozycji | zbędne, jeśli klipy kończą się kadrem bazowym | |
 | 14 | Zakończenie / propozycja | do zrobienia | |
 | 15 | Pozycja końcowa | używa 01 | |
+
+Wskazówka: klipy 20 s, w których jedna czynność płynnie przechodzi w następną (jak 04+05), dają najbardziej naturalny efekt, bo nie ma między nimi szwu.
 
 Kolejność „następnych” odpowiada obiegowi dokumentu: przyjęcie → odczyt → analiza → segregowanie → odłożenie do akceptacji.
 

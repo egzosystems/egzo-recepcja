@@ -195,7 +195,9 @@ byId.idle.src='media/egzo-idle_2026-10-27.mp4'; byId.rest.src='media/egzo-idle_2
 // powitanie: klip Veo + domknięcie z drugiego klipu; po nim pętla wchodzi w klatce najbliższej końcowi (11,04 s)
 byId.greet.src='media/egzo-powitanie_2026-10-27.mp4'; byId.greet.exitAt=265/24;
 // przyjęcie pliku: klip Veo (ręka podaje kartkę) + powrót z kartką do pozycji
-byId.receive.src='media/egzo-przyjecie_2026-10-27.mp4'; byId.receive.exitAt=265/24;
+byId.receive.src='media/egzo-przyjecie-odczyt_2026-10-27.mp4'; byId.receive.exitAt=265/24;
+// ten klip zawiera też czytanie (od 10,4 s), więc ujęcie 05 jest w nim
+byId.receive.marks=[[10.4,'Czyta']]; byId.read.inClip='04';
 
 /* ---------- Odtwarzacz z przenikaniem ---------- */
 const vA=document.getElementById('vA'), vB=document.getElementById('vB'), still=document.getElementById('still');
@@ -272,7 +274,7 @@ function renderClips(){
   STATES.forEach(s=>{
     const d=document.createElement('div'); d.className='clip'; d.dataset.id=s.id;
     d.innerHTML=`<h3><span>${String(s.no).padStart(2,'0')}</span>${s.n}</h3>
-      <div class="st ${s.src?'ok':''}">${s.src?'klip wczytany':'brak klipu · kadr bazowy'}${s.loop?' · pętla':''}</div>
+      <div class="st ${s.src||s.inClip?'ok':''}">${s.src?'klip wczytany':s.inClip?'zawarte w ujęciu '+s.inClip:'brak klipu · kadr bazowy'}${s.loop?' · pętla':''}</div>
       <div class="row"><button class="btn pri" data-play>Odtwórz</button>
       <label class="btn">Wczytaj wideo<input type="file" accept="video/*" id="in-${s.id}"></label>
       <button class="btn" data-copy>Kopiuj prompt</button></div>
@@ -336,8 +338,12 @@ const wait=ms=>new Promise(r=>setTimeout(r,ms));
 async function work(){
   if(busy.v)return; const d=pending.shift(); if(!d)return; busy.v=true; sel=d;
   statusLock=true; d.s='W TRAKCIE'; refresh();
-  setStatus(`Czyta <b>${esc(d.name)}</b>`,true);
+  const verb=byId.receive.src?'Przyjmuje':'Czyta';
+  setStatus(`${verb} <b>${esc(d.name)}</b>`,true);
+  // znaczniki w klipie: zmiana opisu w trakcie ruchu (np. przyjęcie → czytanie)
+  const mk=setInterval(()=>{const m=(cur.marks||[]).filter(([t])=>front.currentTime>=t).pop(); if(m) setStatus(`${m[1]} <b>${esc(d.name)}</b>`,true);},200);
   await Promise.all([play(['receive','read','analyze','browse','sort']),wait(2500)]);
+  clearInterval(mk);
   d.s='DO AKCEPTACJI'; refresh();
   setStatus(`Gotowe do akceptacji: <b>${esc(d.name)}</b>`);
   await play(['file','explain','return']);
