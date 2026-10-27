@@ -155,6 +155,13 @@ Nowy test `tests/test_realizm.py` mierzy na tym, co faktycznie słychać i wida�
 - Wersja danych w adresach plików (`wersjaDanych`) — po przebudowie kwestii/ust przeglądarka nie bierze starych plików z pamięci.
 - Test `tests/test_polecenia.py` (atrapa Claude): „Podnieś rękę” → potwierdzenie z biblioteki po 0,1 s → klip powitania po 0,9 s → spoczynek.
 
+## Analiza dokumentów (wersja 17)
+- Odczyt: TXT/MD/CSV/JSON, PDF (pdf.js z CDN, wątek `lib/pdf.worker.min.js` obok strony; do 15 stron), skan PDF bez tekstu → 1. strona jako obraz, DOCX i XLSX (własny odczyt ZIP przez DecompressionStream, encje XML), zdjęcia JPG/PNG/WebP.
+- Analiza przez Claude (`sample.json`, obrazy dozwolone): typ, tytuł, streszczenie, dane (klient, telefon, e-mail, adres, numer, wymiary, wyposażenie, kolor, kwota, zaliczka, termin…), zadania, tagi i jedno zdanie „powiedz” do szefa. Treść dokumentu oznaczona jako dane (bez wykonywania poleceń z niej). Rusza od razu po wrzuceniu, równolegle z animacją; czekanie najwyżej 25 s ponad animację.
+- Notatka Obsidiana: frontmatter (typ, status, klient, kwota, zaliczka, termin, numer, tagi), streszczenie, tabela danych, „Do zrobienia” jako pola wyboru, obieg, fragment treści; przycisk „Pobierz .md” (nazwa z tytułem i datą).
+- Dokumenty z analizą w bazie strony (`dokumenty`, tylko właściciel) — zostają po odświeżeniu, widać je na telefonie; asystentka zna ich streszczenia i dane w rozmowie.
+- Test `tests/test_dokumenty.py` + pliki `tests/pliki/` (6 typów): odczyt, obrazy, baza, notatka, mowa, pobranie — OK.
+
 ## Plan
 1. Ujęcia obiegu: 05 odczyt, 06 analiza, 08 segregowanie, 12 odłożenie (prompty w `docs/ujecia.md`).
 2. Poprawki logo na ścianie → nowy kadr bazowy (wtedy klipy generujemy już z niego).

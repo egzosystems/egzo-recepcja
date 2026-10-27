@@ -7,4 +7,5 @@ fail=0
 for t in test_mowa test_polecenia test_realizm test_kat_ust test_otwieranie_ust test_broda test_wolne_urzadzenie; do
   if python3 "tests/$t.py" "$URL" > "/tmp/wynik_$t.txt" 2>&1; then echo "OK            $t"; else echo "NIE ZALICZONY $t  (szczegóły: /tmp/wynik_$t.txt)"; fail=1; fi
 done
+if python3 tests/test_dokumenty.py tests/pliki "$URL" > /tmp/wynik_test_dokumenty.txt 2>&1; then echo "OK            test_dokumenty"; else echo "NIE ZALICZONY test_dokumenty  (szczegóły: /tmp/wynik_test_dokumenty.txt)"; fail=1; fi
 exit $fail
