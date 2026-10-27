@@ -1,0 +1,59 @@
+{
+ "tileW": 84,
+ "tileH": 60,
+ "offY": 7,
+ "shapes": [
+  "rest",
+  "slight",
+  "mid",
+  "open",
+  "wide",
+  "o",
+  "o2"
+ ],
+ "meta": [
+  {
+   "name": "rest",
+   "frame": 46,
+   "score": 0.774,
+   "scale": 0.93
+  },
+  {
+   "name": "slight",
+   "frame": 62,
+   "score": 0.736,
+   "scale": 0.92
+  },
+  {
+   "name": "mid",
+   "frame": 72,
+   "score": 0.687,
+   "scale": 0.92
+  },
+  {
+   "name": "open",
+   "frame": 54,
+   "score": 0.755,
+   "scale": 0.92
+  },
+  {
+   "name": "wide",
+   "frame": 68,
+   "score": 0.75,
+   "scale": 0.93
+  },
+  {
+   "name": "o",
+   "frame": 58,
+   "score": 0.737,
+   "scale": 0.92
+  },
+  {
+   "name": "o2",
+   "frame": 76,
+   "score": 0.688,
+   "scale": 0.92
+  }
+ ],
+ "roll0": -9.5
+}

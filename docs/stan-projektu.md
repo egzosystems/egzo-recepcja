@@ -34,6 +34,15 @@
 - Pierwsze włączenie: ok. 75 MB do pobrania; potem start w kilka sekund. Mowa generowana zdanie po zdaniu.
 - Kwantyzacja int8 sprawdzona i odrzucona: zmienia barwę głosu i liczy się ~5× wolniej.
 
+## Głos (wersja 3) i synchronizacja ust
+- Głos domyślny: **Mai** (Coqui VITS pl, kobiecy, ok. 171 Hz), wybrany przez właściciela z próbek. Wejście = litery, liczby rozwijane na słowa (`spokenPL`). Gosia zostaje jako opcja w Studiu.
+- Brzmienie „miękkie”: wolniej (length 1,15), gładziej (noise 0,45 / 0,6), filtr: dolnoprzepustowy 80 Hz, +3 dB półka 220 Hz, −4 dB przy 3,4 kHz, +2,5 dB półka 9,5 kHz, łagodna kompresja.
+- Usta: atlas 7 kształtów (rest, slight, mid, open, wide, o, o2) wyciętych z klipu powitania, obróconych do przechyłu głowy w kadrze bazowym (−9,5°), wyrównanych do górnej wargi, dopasowanych kolorystycznie i lekko wyostrzonych (`lip/usta-atlas.png`).
+- Tor ust w pętli spoczynkowej: twarz (wzorzec oczy–nos–usta) + doprecyzowanie samym wzorcem ust, podpikselowo (`lip/usta-tor.json`).
+- Dobór kształtu: głośność co 10 ms + sylaby (maksima głośności) przypisane do kolejnych samogłosek z tekstu (o/u/ó/ą → zaokrąglone, e/i/y/ę → szerokie, a → otwarte); wygładzenie 70 ms; obraz wyprzedza dźwięk o 45 ms.
+- Mówi w spoczynku (tam śledzenie jest najdokładniejsze): podziękowanie przed sięgnięciem po kartkę, „gotowe” po powrocie, odpowiedzi w rozmowie.
+- Narzędzia: `tools/track_face.py`, `tools/mouth_atlas.py`, `tools/refine_lips.py`, `tools/roll_align.py` (z tego ostatniego używany wynik atlasu; kąt klatka po klatce okazał się zbędny — przechył w pętli jest stały).
+
 ## Plan
 1. Ujęcia obiegu: 05 odczyt, 06 analiza, 08 segregowanie, 12 odłożenie (prompty w `docs/ujecia.md`).
 2. Poprawki logo na ścianie → nowy kadr bazowy (wtedy klipy generujemy już z niego).

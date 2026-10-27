@@ -1,16 +1,17 @@
-/* Głos asystentki EGZO: neuronowy syntezator Piper (pl_PL „gosia”) w przeglądarce.
- * Wątek roboczy: wymowa (espeak-ng w WASM, tylko polski) -> identyfikatory fonemów -> model VITS (onnxruntime-web)
- * -> próbki audio 22 050 Hz odsyłane do strony. Model trzymany w IndexedDB po pierwszym pobraniu.
+/* Głos asystentki EGZO generowany w przeglądarce (działa też w aplikacji Claude).
+ *  - „mai”   (domyślny): Coqui VITS pl, kobiecy, wejście = litery (bez słownika wymowy)
+ *  - „gosia” (zapasowy): Piper pl_PL, wejście = fonemy z espeak-ng (WASM, słownik tylko polski)
+ * Model pobierany w częściach, po pierwszym razie trzymany w IndexedDB.
  *
- * Wiadomości:  {type:'init'} -> {type:'progress',loaded,total} ... {type:'ready'} | {type:'error',message}
- *              {type:'speak',id,text,rate} -> {type:'audio',id,pcm:Float32Array,sampleRate} | {type:'error',id,message}
+ * Wiadomości:  {type:'init',voice} -> {type:'progress',loaded,total,cached} ... {type:'ready'} | {type:'error',message}
+ *              {type:'speak',id,text,rate} -> {type:'audio',id,pcm,sampleRate} | {type:'error',id,message}
  */
 const BASE = self.location.href.replace(/[^/]*$/, '');
-const MODEL_KEY = 'gosia-medium-v1';
-const MODEL_PARTS = 5;
-const CFG = { sampleRate: 22050, noise: 0.667, lengthScale: 1.0, noiseW: 0.8 };
-
-let session = null, wasmBin = null, dataBin = null, initP = null;
+const VOICES = {
+  mai:   { key: 'mai-female-v1', parts: 6, file: i => 'mai-' + i + '.bin.wasm', sr: 22050, noise: 0.45, length: 1.15, noiseW: 0.6, kind: 'graphemes' },
+  gosia: { key: 'gosia-medium-v1', parts: 5, file: i => 'gosia-' + i + '.bin.wasm', sr: 22050, noise: 0.45, length: 1.15, noiseW: 0.6, kind: 'phonemes' },
+};
+let V = null, session = null, initP = null, tokens = null, phWasm = null, phData = null;
 
 function idb() {
   return new Promise((res, rej) => {
@@ -29,18 +30,18 @@ async function idbPut(k, v) {
 }
 
 async function loadModel() {
-  const cached = await idbGet(MODEL_KEY);
+  const cached = await idbGet(V.key);
   if (cached) { postMessage({ type: 'progress', loaded: 1, total: 1, cached: true }); return new Uint8Array(cached); }
   const parts = []; let total = 0;
-  for (let i = 0; i < MODEL_PARTS; i++) {
-    const r = await fetch(BASE + 'gosia-' + i + '.bin.wasm');
+  for (let i = 0; i < V.parts; i++) {
+    const r = await fetch(BASE + V.file(i));
     if (!r.ok) throw new Error('Nie udało się pobrać modelu głosu (część ' + (i + 1) + ').');
     const b = new Uint8Array(await r.arrayBuffer()); parts.push(b); total += b.length;
-    postMessage({ type: 'progress', loaded: i + 1, total: MODEL_PARTS });
+    postMessage({ type: 'progress', loaded: i + 1, total: V.parts });
   }
   const buf = new Uint8Array(total); let o = 0;
   for (const p of parts) { buf.set(p, o); o += p.length; }
-  idbPut(MODEL_KEY, buf.buffer);
+  idbPut(V.key, buf.buffer);
   return buf;
 }
 
@@ -49,59 +50,76 @@ function loadScript(local, remote) {
   catch (e) { if (!remote) throw e; importScripts(remote); }
 }
 
-async function init() {
+async function init(voice) {
+  V = VOICES[voice] || VOICES.mai;
   loadScript('ort.wasm-core.min.js', 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.17.3/dist/ort.wasm-core.min.js');
   ort.env.wasm.wasmPaths = BASE;
   ort.env.wasm.numThreads = 1;
   ort.env.wasm.proxy = false;
-  loadScript('piper_phonemize.js');
-  const [w, d] = await Promise.all([
-    fetch(BASE + 'piper_phonemize.wasm').then(r => r.arrayBuffer()),
-    fetch(BASE + 'piper_phonemize.data.wasm').then(r => r.arrayBuffer()),
-  ]);
-  wasmBin = w; dataBin = d;
+  if (V.kind === 'graphemes') {
+    const txt = await fetch(BASE + 'mai-tokens.txt').then(r => r.text());
+    tokens = new Map();
+    for (const line of txt.split('\n')) {
+      if (!line) continue;
+      const i = line.lastIndexOf(' ');
+      tokens.set(i === 0 ? ' ' : line.slice(0, i), +line.slice(i + 1));
+    }
+  } else {
+    loadScript('piper_phonemize.js');
+    [phWasm, phData] = await Promise.all([
+      fetch(BASE + 'piper_phonemize.wasm').then(r => r.arrayBuffer()),
+      fetch(BASE + 'piper_phonemize.data.wasm').then(r => r.arrayBuffer()),
+    ]);
+  }
   const model = await loadModel();
   session = await ort.InferenceSession.create(model, { executionProviders: ['wasm'], graphOptimizationLevel: 'all' });
 }
 
-async function phonemize(text) {
-  let out = '';
-  const mod = await createPiperPhonemize({
-    print: s => { out += s; },
-    printErr: () => {},
-    wasmBinary: wasmBin,
-    getPreloadedPackage: () => dataBin,
-    locateFile: f => BASE + f,
-  });
-  mod.callMain(['-l', 'pl', '--input', JSON.stringify([{ text }]), '--espeak_data', '/espeak-ng-data']);
-  const ids = JSON.parse(out).phoneme_ids;
-  if (!ids || !ids.length) throw new Error('Pusta wymowa.');
+function graphemeIds(text) {
+  const blank = tokens.get('<BLNK>'); const ids = [];
+  for (const ch of text.toLowerCase().replace(/\s+/g, ' ')) {
+    if (tokens.has(ch)) { ids.push(blank, tokens.get(ch)); }
+  }
+  ids.push(blank);
   return ids;
 }
 
+async function phonemeIds(text) {
+  let out = '';
+  const mod = await createPiperPhonemize({ print: s => { out += s; }, printErr: () => {}, wasmBinary: phWasm, getPreloadedPackage: () => phData, locateFile: f => BASE + f });
+  mod.callMain(['-l', 'pl', '--input', JSON.stringify([{ text }]), '--espeak_data', '/espeak-ng-data']);
+  return JSON.parse(out).phoneme_ids;
+}
+
+const i64 = a => new ort.Tensor('int64', BigInt64Array.from(a.map(BigInt)), [a.length]);
+
 async function synth(text, rate) {
-  const ids = await phonemize(text);
-  const n = ids.length;
+  const ids = V.kind === 'graphemes' ? graphemeIds(text) : await phonemeIds(text);
+  if (!ids || ids.length < 3) throw new Error('Pusty tekst.');
   const feeds = {
-    input: new ort.Tensor('int64', BigInt64Array.from(ids.map(BigInt)), [1, n]),
-    input_lengths: new ort.Tensor('int64', BigInt64Array.from([BigInt(n)]), [1]),
-    scales: new ort.Tensor('float32', Float32Array.from([CFG.noise, CFG.lengthScale / (rate || 1), CFG.noiseW]), [3]),
+    input: new ort.Tensor('int64', BigInt64Array.from(ids.map(BigInt)), [1, ids.length]),
+    input_lengths: i64([ids.length]),
+    scales: new ort.Tensor('float32', Float32Array.from([V.noise, V.length / (rate || 1), V.noiseW]), [3]),
   };
+  if (session.inputNames.includes('sid')) feeds.sid = i64([0]);
+  if (session.inputNames.includes('langid')) feeds.langid = i64([0]);
   const res = await session.run(feeds);
-  const out = res[session.outputNames[0]];
-  return new Float32Array(out.data);
+  const pcm = new Float32Array(res[session.outputNames[0]].data);
+  let peak = 0; for (let i = 0; i < pcm.length; i++) peak = Math.max(peak, Math.abs(pcm[i]));
+  if (peak > 0) { const g = 0.8 / peak; for (let i = 0; i < pcm.length; i++) pcm[i] *= g; }
+  return pcm;
 }
 
 self.onmessage = async e => {
   const m = e.data || {};
   if (m.type === 'init') {
-    try { initP = initP || init(); await initP; postMessage({ type: 'ready' }); }
+    try { initP = initP || init(m.voice); await initP; postMessage({ type: 'ready' }); }
     catch (err) { initP = null; postMessage({ type: 'error', message: String(err && err.message || err) }); }
   } else if (m.type === 'speak') {
     try {
       await initP;
       const pcm = await synth(m.text, m.rate);
-      postMessage({ type: 'audio', id: m.id, pcm, sampleRate: CFG.sampleRate }, [pcm.buffer]);
+      postMessage({ type: 'audio', id: m.id, pcm, sampleRate: V.sr }, [pcm.buffer]);
     } catch (err) { postMessage({ type: 'error', id: m.id, message: String(err && err.message || err) }); }
   }
 };

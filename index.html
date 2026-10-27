@@ -112,6 +112,7 @@ input[type=range]{accent-color:var(--gold);width:100%}
 .chat input[type=text]:focus{outline:2px solid var(--gold);outline-offset:1px}
 .hint{font-size:12px;color:var(--muted)}
 .knobs select{background:var(--ink);color:var(--text);border:1px solid var(--line);border-radius:3px;padding:4px;font:inherit;min-width:0;width:100%}
+.lipc{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
 /* Ostre tabliczki na tackach: nakładka w kadrze, porusza się razem z kamerą */
 .stage{container-type:inline-size}
 .plate{position:absolute;top:95.6%;height:3.4%;display:flex;align-items:center;justify-content:center;gap:.5em;
@@ -138,6 +139,7 @@ input[type=range]{accent-color:var(--gold);width:100%}
         <video id="vA" poster="media/egzo-poster_2026-10-27.jpg" muted playsinline preload="auto"></video>
         <video id="vB" muted playsinline preload="auto"></video>
         <video id="vC" muted playsinline preload="auto" data-src="media/egzo-wejscia_2026-10-27.mp4"></video>
+        <canvas id="lipCanvas" class="lipc" width="1280" height="720" aria-hidden="true"></canvas>
         <div class="bgblur" id="bgblur"></div>
         <div class="plate" data-t="NOWE" style="left:4.4%;width:12.4%;--p1:#9a7f66;--p2:#86694f">NOWE <i>0</i></div>
         <div class="plate" data-t="W TRAKCIE" style="left:31.3%;width:13.2%;--p1:#8a6f5a;--p2:#7a5f49">W TRAKCIE <i>0</i></div>
@@ -415,7 +417,7 @@ async function work(){
   statusLock=true; d.s='W TRAKCIE'; refresh();
   const verb=byId.receive.src?'Przyjmuje':'Czyta';
   setStatus(`${verb} <b>${esc(d.name)}</b>`,true);
-  say('Dziękuję, już czytam.');
+  await say('Dziękuję. Już czytam.');
   // znaczniki w klipie: zmiana opisu w trakcie ruchu (np. przyjęcie → czytanie)
   const mk=setInterval(()=>{const v=[vA,vB].find(x=>x.style.opacity==='1'&&cur.src&&x.src.endsWith(cur.src)); if(!v) return; const m=(cur.marks||[]).filter(([t])=>v.currentTime>=t).pop(); if(m) setStatus(`${m[1]} <b>${esc(d.name)}</b>`,true);},200);
   await Promise.all([play(['receive','read','analyze','browse','sort']),wait(2500)]);
@@ -437,7 +439,7 @@ stage.addEventListener('drop',e=>{e.preventDefault();veil.hidden=true;ingest(e.d
 
 
 /* ---------- Głos: neuronowy Piper „Gosia” w przeglądarce (działa też w aplikacji Claude), zapasowo syntezator systemu ---------- */
-const voice={on:false,v:null,rate:1,pitch:1.05,list:[],engine:'neural'};
+const voice={on:false,v:null,rate:1,pitch:1.05,list:[],engine:'neural',neural:'mai'};
 const subEl=document.getElementById('subtitle');
 const hasTTS='speechSynthesis' in window;
 const VOICE_BASE=(document.querySelector('[data-voice-base]')?.dataset.voiceBase)||'voice/';
@@ -447,12 +449,19 @@ function loadVoices(){
   const sel=document.getElementById('voiceSel');
   voice.list=hasTTS?speechSynthesis.getVoices().filter(v=>/^pl/i.test(v.lang)):[];
   if(voice.engine==='system'&&!voice.list.includes(voice.v)) voice.v=voice.list[0]||null;
-  sel.innerHTML='<option value="neural">Gosia (neuronowy, w przeglądarce)</option>'+voice.list.map((v,i)=>`<option value="${i}">${esc(v.name)} (system)</option>`).join('');
-  sel.value=voice.engine==='neural'?'neural':String(voice.list.indexOf(voice.v));
+  sel.innerHTML='<option value="mai">Mai — miękki (domyślny)</option><option value="gosia">Gosia — jaśniejszy</option>'+voice.list.map((v,i)=>`<option value="${i}">${esc(v.name)} (system)</option>`).join('');
+  sel.value=voice.engine==='neural'?voice.neural:String(voice.list.indexOf(voice.v));
 }
 if(hasTTS){ speechSynthesis.addEventListener?.('voiceschanged',loadVoices); }
 loadVoices();
-document.getElementById('voiceSel').onchange=e=>{ if(e.target.value==='neural'){voice.engine='neural';} else {voice.engine='system'; voice.v=voice.list[+e.target.value]||null;} };
+document.getElementById('voiceSel').onchange=e=>{
+  const val=e.target.value;
+  if(val==='mai'||val==='gosia'){
+    voice.engine='neural';
+    if(val!==voice.neural){ voice.neural=val; neural.worker?.terminate(); neural.worker=null; neural.ready=null; neural.state='off';
+      if(voice.on) neuralInit().then(()=>say('Tak teraz brzmię.')).catch(()=>{}); }
+  } else { voice.engine='system'; voice.v=voice.list[+val]||null; }
+};
 function subtitle(t){ clearTimeout(subTimer); subEl.textContent=t||''; document.getElementById('subline').textContent=t?'„'+t+'”':''; }
 
 function neuralInit(){
@@ -463,27 +472,40 @@ function neuralInit(){
     neural.worker=w;
     w.onmessage=e=>{
       const m=e.data||{};
-      if(m.type==='progress'){ if(!m.cached) subtitle(`Pobieram głos (tylko za pierwszym razem, ok. 75 MB)… ${Math.round(100*m.loaded/m.total)}%`); else subtitle('Wczytuję głos…'); }
+      if(m.type==='progress'){ if(!m.cached) subtitle(`Pobieram głos (tylko za pierwszym razem, ok. 80 MB)… ${Math.round(100*m.loaded/m.total)}%`); else subtitle('Wczytuję głos…'); }
       else if(m.type==='ready'){ neural.state='ready'; subtitle(''); res(); }
       else if(m.type==='error'&&m.id==null){ neural.state='failed'; rej(new Error(m.message)); }
       else if(m.id!=null){ const p=neural.pending.get(m.id); neural.pending.delete(m.id); if(p) (m.type==='audio'?p.res(m):p.rej(new Error(m.message))); }
     };
     w.onerror=ev=>{ neural.state='failed'; rej(new Error(ev.message||'Wątek głosu nie wystartował.')); };
-    w.postMessage({type:'init'});
+    w.postMessage({type:'init',voice:voice.neural});
   });
   neural.ready.catch(()=>{ neural.ready=null; });
   return neural.ready;
 }
 function synthNeural(text){ const id=++neural.seq; return new Promise((res,rej)=>{ neural.pending.set(id,{res,rej}); neural.worker.postMessage({type:'speak',id,text,rate:voice.rate}); }); }
-function playPcm(m,tok){
+// łańcuch brzmienia: ciepły dół, przygaszona ostrość, delikatne „powietrze”, łagodna kompresja
+function voiceChain(ctx){
+  if(neural.chain) return neural.chain;
+  const f=(type,freq,gain,q)=>{const n=ctx.createBiquadFilter();n.type=type;n.frequency.value=freq;if(gain!=null)n.gain.value=gain;if(q!=null)n.Q.value=q;return n;};
+  const hp=f('highpass',80,null,.7), lo=f('lowshelf',220,3), mid=f('peaking',3400,-4,1.4), hi=f('highshelf',9500,2.5);
+  const comp=ctx.createDynamicsCompressor(); comp.threshold.value=-20; comp.ratio.value=2.5; comp.attack.value=.008; comp.release.value=.15; comp.knee.value=6;
+  const out=ctx.createGain(); out.gain.value=1.1;
+  hp.connect(lo); lo.connect(mid); mid.connect(hi); hi.connect(comp); comp.connect(out); out.connect(ctx.destination);
+  return neural.chain=hp;
+}
+function playPcm(m,tok,text){
   return new Promise(r=>{
     if(tok!==sayTok||!neural.ctx){ r(); return; }
     const ctx=neural.ctx, buf=ctx.createBuffer(1,m.pcm.length,m.sampleRate); buf.copyToChannel(m.pcm,0);
-    const s=ctx.createBufferSource(); s.buffer=buf; s.connect(ctx.destination); neural.src=s;
-    s.onended=()=>{ if(neural.src===s) neural.src=null; r(); }; s.start();
+    const s=ctx.createBufferSource(); s.buffer=buf; s.connect(voiceChain(ctx)); neural.src=s;
+    const vis=lipVisemes(m.pcm,m.sampleRate,text);
+    s.onended=()=>{ if(neural.src===s) neural.src=null; if(lip.cur&&lip.cur.src===s) lip.cur=null; r(); };
+    const t0=ctx.currentTime+.03; s.start(t0);
+    lip.cur={src:s,t0,vis,dur:buf.duration};
   });
 }
-function stopSpeech(){ sayTok++; try{neural.src?.stop();}catch(e){} neural.src=null; if(hasTTS) speechSynthesis.cancel(); }
+function stopSpeech(){ sayTok++; try{neural.src?.stop();}catch(e){} neural.src=null; lip.cur=null; if(hasTTS) speechSynthesis.cancel(); }
 function sentences(t){ return (t.match(/[^.!?…]+[.!?…]*["”»]?\s*/g)||[t]).map(s=>s.trim()).filter(Boolean); }
 
 async function say(text){
@@ -492,11 +514,11 @@ async function say(text){
   const fin=()=>{ if(tok===sayTok) subTimer=setTimeout(()=>subtitle(''),700); };
   if(voice.on&&voice.engine==='neural'&&neural.state==='ready'){
     try{
-      const parts=sentences(text); let next=synthNeural(parts[0]);
+      const parts=sentences(spokenPL(text)); let next=synthNeural(parts[0]);
       for(let i=0;i<parts.length;i++){
         const m=await next; if(tok!==sayTok) return;
         next=i+1<parts.length?synthNeural(parts[i+1]):null;
-        await playPcm(m,tok); if(tok!==sayTok) return;
+        await playPcm(m,tok,parts[i]); if(tok!==sayTok) return;
       }
       fin(); return;
     }catch(e){ /* spada na syntezator systemu niżej */ }
@@ -533,6 +555,7 @@ voiceBtn.onclick=async()=>{
 // w klipie powitania usta ruszają się ok. 2,2–3,6 s — kwestia startuje w tym oknie
 const GREET_LINE='Dzień dobry! Jestem asystentką EGZO. Wrzuć dokument, a zajmę się nim.';
 function greetWithVoice(){
+  if(voice.on&&voice.engine==='neural'){ return say(GREET_LINE); }
   play(['greet']);
   const t0=performance.now();
   const iv=setInterval(()=>{
@@ -542,6 +565,85 @@ function greetWithVoice(){
   },60);
 }
 ['rate','pitch'].forEach(k=>{const el=document.getElementById('k'+k);el.oninput=()=>{voice[k]=+el.value/100;document.getElementById('o'+k).textContent=(+el.value/100).toFixed(2);};});
+
+
+/* ---------- Liczby po polsku (model Mai czyta tylko litery) ---------- */
+function numPL(n){
+  const j=['zero','jeden','dwa','trzy','cztery','pięć','sześć','siedem','osiem','dziewięć','dziesięć','jedenaście','dwanaście','trzynaście','czternaście','piętnaście','szesnaście','siedemnaście','osiemnaście','dziewiętnaście'];
+  const d=['','','dwadzieścia','trzydzieści','czterdzieści','pięćdziesiąt','sześćdziesiąt','siedemdziesiąt','osiemdziesiąt','dziewięćdziesiąt'];
+  const s=['','sto','dwieście','trzysta','czterysta','pięćset','sześćset','siedemset','osiemset','dziewięćset'];
+  const under1000=x=>{const r=[];if(x>=100){r.push(s[Math.floor(x/100)]);x%=100;} if(x>=20){r.push(d[Math.floor(x/10)]);x%=10;if(x)r.push(j[x]);} else if(x||!r.length) r.push(j[x]); return r.join(' ');};
+  if(n<1000) return under1000(n);
+  if(n<1000000){ const t=Math.floor(n/1000), rest=n%1000;
+    const tw=t===1?'tysiąc':under1000(t)+' '+((t%10>=2&&t%10<=4&&(t%100<12||t%100>14))?'tysiące':'tysięcy');
+    return rest?tw+' '+under1000(rest):tw; }
+  return String(n).split('').map(c=>j[+c]).join(' ');
+}
+function spokenPL(t){
+  return t.replace(/(\d+)\s*[x×]\s*(\d+)/g,'$1 na $2').replace(/(\d+)[,.](\d+)/g,'$1 przecinek $2')
+          .replace(/\d+/g,m=>numPL(+m)).replace(/[_/]+/g,' ').replace(/%/g,' procent').replace(/\s+/g,' ');
+}
+
+/* ---------- Synchronizacja ust: kształt z dźwięku (głośność) i tekstu (samogłoski) ---------- */
+const lip={img:null,meta:null,track:null,cur:null,alpha:0,shA:0,shB:0,mix:1,canvas:document.getElementById('lipCanvas')};
+lip.ctx=lip.canvas.getContext('2d');
+(async()=>{ try{
+  const [meta,track]=await Promise.all([fetch('lip/usta-atlas.json').then(r=>r.json()),fetch('lip/usta-tor.json').then(r=>r.json())]);
+  const img=new Image(); img.src='lip/usta-atlas.png'; await img.decode();
+  lip.meta=meta; lip.track=track.idle; lip.img=img; lip.SH=Object.fromEntries(meta.shapes.map((n,i)=>[n,i]));
+}catch(e){ lip.img=null; } })();
+function lipVisemes(pcm,sr,text){
+  const hop=Math.round(sr*.01), n=Math.max(1,Math.floor(pcm.length/hop)), env=new Float32Array(n);
+  for(let i=0;i<n;i++){ let a=0; const s=i*hop, e=Math.min(pcm.length,s+2*hop); for(let k=s;k<e;k++) a+=pcm[k]*pcm[k]; env[i]=Math.sqrt(a/Math.max(1,e-s)); }
+  const sm=new Float32Array(n); for(let i=0;i<n;i++){ sm[i]=(env[Math.max(0,i-1)]+2*env[i]+env[Math.min(n-1,i+1)])/4; }
+  const sorted=Array.from(sm).sort((a,b)=>a-b), p95=sorted[Math.floor(.95*(n-1))]||1;
+  for(let i=0;i<n;i++) sm[i]=Math.min(1,sm[i]/p95);
+  // sylaby = lokalne maksima głośności; każdej przypisujemy kolejną samogłoskę z tekstu
+  const peaks=[]; for(let i=1;i<n-1;i++){ if(sm[i]>.35&&sm[i]>=sm[i-1]&&sm[i]>=sm[i+1]&&(!peaks.length||i-peaks[peaks.length-1]>=9)) peaks.push(i); }
+  const vow=(text.toLowerCase().match(/[aąeęioóuy]/g)||['a']);
+  const SH=lip.SH||{rest:0,slight:1,mid:2,open:3,wide:4,o:5,o2:6}, out=new Uint8Array(n);
+  let pi=0;
+  for(let i=0;i<n;i++){
+    while(pi<peaks.length-1 && Math.abs(peaks[pi+1]-i)<Math.abs(peaks[pi]-i)) pi++;
+    const v=peaks.length?vow[Math.min(vow.length-1,Math.round(pi*(vow.length-1)/Math.max(1,peaks.length-1)))]:'a';
+    const L=sm[i];
+    let sh;
+    if(L<.1) sh='rest';
+    else if('oóuą'.includes(v)) sh=L>.5?'o2':'o';
+    else if('eęiy'.includes(v)) sh=L>.55?'wide':'slight';
+    else sh=L>.55?'open':(L>.25?'mid':'slight');
+    out[i]=SH[sh];
+  }
+  // wygładzenie: najczęstszy kształt w oknie 70 ms — bez migotania między kształtami
+  const sm2=new Uint8Array(n), cnt=new Uint8Array(8);
+  for(let i=0;i<n;i++){ cnt.fill(0); for(let k=Math.max(0,i-3);k<=Math.min(n-1,i+3);k++) cnt[out[k]]++; let b=out[i]; for(let q=0;q<8;q++) if(cnt[q]>cnt[b]) b=q; sm2[i]=b; }
+  return sm2;
+}
+function lipFrame(){
+  requestAnimationFrame(lipFrame);
+  const c=lip.ctx, W=lip.canvas.width, H=lip.canvas.height;
+  if(!lip.img){ return; }
+  const v=front, onIdle=v.style.opacity==='1'&&byId.idle.src&&v.src.endsWith(byId.idle.src);
+  let target=0, shape=0;
+  if(lip.cur&&onIdle&&neural.ctx){
+    const at=neural.ctx.currentTime-lip.cur.t0+.045;           // obraz lekko wyprzedza dźwięk, jak u ludzi
+    if(at>=0&&at<lip.cur.dur){ target=1; shape=lip.cur.vis[Math.min(lip.cur.vis.length-1,Math.floor(at/.01))]; }
+    else if(at<0){ target=1; shape=0; }
+  }
+  const fi=Math.min(lip.track.length-1,Math.max(0,Math.round(v.currentTime*24))), tr=lip.track[fi];
+  if(!tr||tr[3]<.5) target=0;
+  lip.alpha+=(target-lip.alpha)*(target>lip.alpha?.35:.2);
+  if(shape!==lip.shB){ lip.shA=lip.shB; lip.shB=shape; lip.mix=0; }
+  lip.mix=Math.min(1,lip.mix+.6);
+  if(lip.last){ c.clearRect(lip.last[0]-2,lip.last[1]-2,lip.last[2]+4,lip.last[3]+4); lip.last=null; }
+  if(lip.alpha<.02||!tr) return;
+  const m=lip.meta, s=tr[2], tw=m.tileW, th=m.tileH, dw=tw*s, dh=th*s, dx=tr[0]-dw/2, dy=tr[1]+m.offY*s-dh/2;
+  lip.last=[dx,dy,dw,dh];
+  if(lip.mix<1){ c.globalAlpha=lip.alpha*(1-lip.mix); c.drawImage(lip.img,lip.shA*tw,0,tw,th,dx,dy,dw,dh); }
+  c.globalAlpha=lip.alpha*(lip.mix<1?lip.mix:1); c.drawImage(lip.img,lip.shB*tw,0,tw,th,dx,dy,dw,dh);
+  c.globalAlpha=1;
+}
+requestAnimationFrame(lipFrame);
 
 /* ---------- Rozmowa: Claude odpowiada, ona czyta na głos ---------- */
 const chatLog=document.getElementById('chatLog'), chatForm=document.getElementById('chatForm'), chatIn=document.getElementById('chatIn');
