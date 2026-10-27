@@ -266,7 +266,7 @@ async function ready(v,src,t){
   if(!v.src.endsWith(src)){ v.src=src; await once(v,'loadedmetadata'); }
   if(Math.abs(v.currentTime-t)>.01){ v.currentTime=t; await once(v,'seeked'); }
 }
-async function setState(s){
+async function setState(s,opts={}){
   const prev=cur, my=++tok; cur=s; if(!statusLock) setStatus(SAY[s.id]);
   document.querySelectorAll('.clip').forEach(c=>c.classList.toggle('on',c.dataset.id===s.id));
   cam.target(s);
@@ -281,7 +281,7 @@ async function setState(s){
   }
   const v=back;
   const fromIdle=!s.loop && prev && prev.loop && prev.src && front.style.opacity==='1' && vC.dataset.ok==='1';
-  const matchedExit=s.loop && prev && prev.exitAt!=null;
+  const matchedExit=!opts.soft && s.loop && prev && prev.exitAt!=null;
   const startAt=matchedExit?prev.exitAt:0;
   v.loop=!!s.loop; v.pause();
   try{ await ready(v,s.src,startAt); }catch(e){}
@@ -439,10 +439,10 @@ async function work(){
   clearInterval(mk);
   d.s='DO AKCEPTACJI'; refresh();
   setStatus(`Gotowe do akceptacji: <b>${esc(d.name)}</b>`);
-  say(`Gotowe. ${d.name.replace(/\.[^.]+$/,'').replace(/[_-]+/g,' ')} czeka na akceptację.`);
+  say(pick(['Gotowe. Dokument czeka na twoją akceptację.','Gotowe, przeczytałam. Czeka na twoją akceptację.']));
   await play(['file','explain','return']);
   statusLock=false; busy.v=false;
-  if(pending.length) setTimeout(work,600); else setTimeout(()=>{if(!busy.v)setStatus(SAY[cur.id]);},4000);
+  if(pending.length) setTimeout(work,600); else setTimeout(()=>{if(!busy.v&&!evq.running&&eng.live===0&&!chatBusy)setStatus(SAY[cur.id]);},4000);
 }
 document.getElementById('fileIn').onchange=e=>ingest(e.target.files);
 document.getElementById('dz').onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();document.getElementById('fileIn').click();}};
@@ -487,8 +487,8 @@ function neuralInit(){
     neural.worker=w;
     w.onmessage=e=>{
       const m=e.data||{};
-      if(m.type==='progress'){ if(!m.cached) subtitle(`Pobieram głos (tylko za pierwszym razem, ok. 80 MB)… ${Math.round(100*m.loaded/m.total)}%`); else subtitle('Wczytuję głos…'); }
-      else if(m.type==='ready'){ neural.state='ready'; subtitle(''); res(); }
+      if(m.type==='progress'){ if(neural.state==='loading'&&voice.on) voiceBtn.textContent=m.cached?'Wczytuję głos…':`Pobieram głos ${Math.round(100*m.loaded/m.total)}%`; }
+      else if(m.type==='ready'){ neural.state='ready'; res(); }
       else if(m.type==='error'&&m.id==null){ neural.state='failed'; rej(new Error(m.message)); }
       else if(m.id!=null){ const p=neural.pending.get(m.id); neural.pending.delete(m.id); if(p) (m.type==='audio'?p.res(m):p.rej(new Error(m.message))); }
     };
@@ -498,7 +498,7 @@ function neuralInit(){
   neural.ready.catch(()=>{ neural.ready=null; });
   return neural.ready;
 }
-function synthNeural(text){ const id=++neural.seq; return new Promise((res,rej)=>{ neural.pending.set(id,{res,rej}); neural.worker.postMessage({type:'speak',id,text,rate:voice.rate}); }); }
+function synthNeural(text,ids){ const id=++neural.seq; if(ids) ids.push(id); return new Promise((res,rej)=>{ neural.pending.set(id,{res,rej}); neural.worker.postMessage({type:'speak',id,text,rate:voice.rate}); }); }
 // łańcuch brzmienia: ciepły dół, przygaszona ostrość, delikatne „powietrze”, łagodna kompresja
 function voiceChain(ctx){
   if(neural.chain) return neural.chain;
@@ -509,72 +509,114 @@ function voiceChain(ctx){
   hp.connect(lo); lo.connect(mid); mid.connect(hi); hi.connect(comp); comp.connect(out); out.connect(ctx.destination);
   return neural.chain=hp;
 }
-/* ---------- Silnik mowy: kolejka zdań na osi czasu karty dźwiękowej (bez dziur między zdaniami) ---------- */
-const eng={tok:0,queue:[],busy:false,endAt:0,last:'',live:0,waiters:[],stats:[],rtf:.6,mspc:30,spc:.075};
+/* ---------- Silnik mowy ----------
+   Zasada: dźwięk rusza dopiero, gdy cała wypowiedź jest gotowa (gotowe kwestie z biblioteki — od razu),
+   więc w środku nie ma dziur; zdania układane na osi czasu karty dźwiękowej z naturalnymi pauzami. */
+const eng={tok:0,pend:[],busy:false,ready:[],open:false,hold:true,endAt:0,last:'',live:0,waiters:[],stats:[],sources:[],ids:[]};
 function pauseAfter(t){ return /[?!]["”»]?$/.test(t)?.32:/[.…]["”»]?$/.test(t)?.26:/[,;:]$/.test(t)?.12:.18; }
 function trimSilence(pcm,sr){
-  // cisza na brzegach zdania (model dodaje ok. 50–100 ms) — przycinamy, pauzy ustawia silnik
   let peak=0; for(let i=0;i<pcm.length;i++) peak=Math.max(peak,Math.abs(pcm[i]));
   const th=peak*.02, pad=Math.round(sr*.025); let a=0, b=pcm.length-1;
   while(a<b&&Math.abs(pcm[a])<th) a++; while(b>a&&Math.abs(pcm[b])<th) b--;
   a=Math.max(0,a-pad); b=Math.min(pcm.length,b+pad*2);
   const out=pcm.slice(a,b);
-  const f=Math.min(out.length>>1,Math.round(sr*.006));            // miękkie wejście i wyjście, bez trzasków
+  const f=Math.min(out.length>>1,Math.round(sr*.006));
   for(let i=0;i<f;i++){ const g=i/f; out[i]*=g; out[out.length-1-i]*=g; }
   return {pcm:out,offset:a/sr};
 }
-function speechDone(){ if(!eng.busy&&!eng.queue.length&&eng.live===0){ const w=eng.waiters.splice(0); w.forEach(f=>f()); } }
+/* biblioteka gotowych kwestii (nagrana z góry tym samym głosem) */
+const lib={idx:null,pcm:null,loading:null};
+function loadLibrary(){
+  if(lib.loading) return lib.loading;
+  lib.loading=(async()=>{
+    const [idx,buf]=await Promise.all([fetch(VOICE_BASE+'frazy.json').then(r=>{if(!r.ok) throw new Error('frazy');return r.json();}),fetch(VOICE_BASE+'frazy.wav').then(r=>{if(!r.ok) throw new Error('frazy');return r.arrayBuffer();})]);
+    const dv=new DataView(buf); let p=12;
+    while(p<dv.byteLength-8){
+      const id=String.fromCharCode(dv.getUint8(p),dv.getUint8(p+1),dv.getUint8(p+2),dv.getUint8(p+3)), sz=dv.getUint32(p+4,true);
+      if(id==='data'){ lib.pcm=new Int16Array(buf.slice(p+8,p+8+sz)); break; }
+      p+=8+sz+(sz&1);
+    }
+    lib.idx=idx;
+  })().catch(e=>{ lib.loading=null; throw e; });
+  return lib.loading;
+}
+function libChunks(text){
+  const L=lib.idx&&lib.idx.lines[text]; if(!L||!lib.pcm) return null;
+  return L.map(c=>{ const s=lib.pcm.subarray(c.off,c.off+c.len), f=new Float32Array(c.len); for(let i=0;i<c.len;i++) f[i]=s[i]/32768;
+    return {pcm:f,dur:Float32Array.from(c.dur),chars:[...c.chars],hop:lib.idx.hop,sampleRate:lib.idx.sampleRate,pre:c.pre,text:c.text,ms:0}; });
+}
+function speechDone(){ if(!eng.open&&!eng.pend.length&&!eng.busy&&!eng.ready.length&&eng.live===0){ const w=eng.waiters.splice(0); w.forEach(f=>f()); } }
 function waitSpeech(){ return new Promise(r=>{ eng.waiters.push(r); speechDone(); }); }
-function enqueueSpeech(sentence){ if(!sentence.trim()) return; eng.queue.push(sentence); pumpSpeech(); }
+function enqueueSpeech(text){ if(!text.trim()) return; eng.pend.push(text); pumpSpeech(); }
 async function pumpSpeech(){
   if(eng.busy) return; eng.busy=true; const tok=eng.tok;
-  while(eng.queue.length&&tok===eng.tok){
-    const text=eng.queue.shift(); let m;
-    try{ m=await synthNeural(text); }catch(e){ continue; }
+  while(eng.pend.length&&tok===eng.tok){
+    const text=eng.pend.shift(); let m;
+    try{ m=await synthNeural(text,eng.ids); }catch(e){ continue; }
     if(tok!==eng.tok) break;
-    scheduleSpeech(m,text,tok);
+    m.text=text; eng.ready.push(m); flushSpeech();
   }
-  if(tok===eng.tok){ eng.busy=false; speechDone(); }
+  if(tok===eng.tok){ eng.busy=false; flushSpeech(); speechDone(); }
 }
-function scheduleSpeech(m,text,tok){
+function flushSpeech(){
+  if(eng.hold){
+    const buffered=eng.ready.reduce((a,m)=>a+m.pcm.length/m.sampleRate,0);
+    // start dopiero gdy wszystko gotowe (albo zapas ≥ 6 s mowy przy długich odpowiedziach)
+    if((!eng.open&&!eng.pend.length&&!eng.busy)||buffered>=6) eng.hold=false; else return;
+  }
+  while(eng.ready.length) scheduleSpeech(eng.ready.shift());
+  speechDone();
+}
+function scheduleSpeech(m){
   const ctx=neural.ctx; if(!ctx) return;
   const sr=m.sampleRate, tr=trimSilence(m.pcm,sr);
   const buf=ctx.createBuffer(1,tr.pcm.length,sr); buf.copyToChannel(tr.pcm,0);
   const s=ctx.createBufferSource(); s.buffer=buf; s.connect(voiceChain(ctx));
-  const now=ctx.currentTime, gap=eng.endAt>now?pauseAfter(eng.last):0;
-  // pomiar tego urządzenia: ms syntezy na literę i sekundy mowy na literę (średnie kroczące)
-  if(m.ms&&text.length>8){ eng.mspc=eng.mspc*.4+(m.ms/text.length)*.6; eng.spc=eng.spc*.4+(buf.duration/text.length)*.6; eng.rtf=eng.mspc/1000/eng.spc; }
-  let lead=0;
-  if(eng.endAt<=now&&eng.queue.length){
-    // czy kolejne zdania zdążą się policzyć, zanim przyjdzie ich kolej? jeśli nie — start chwilę później
-    let tSynth=0, tPlay=buf.duration, need=0;
-    for(const q of eng.queue){ tSynth+=q.length*eng.mspc/1000*1.1; need=Math.max(need,tSynth-tPlay); tPlay+=q.length*eng.spc+pauseAfter(q); }
-    lead=Math.min(3,Math.max(0,need));
-  }
-  const start=Math.max(now+.05+lead, eng.endAt+gap);
-  eng.stats.push({gap:+(start-Math.max(eng.endAt,now)).toFixed(3),late:eng.endAt>0&&now>eng.endAt+.02?+(now-eng.endAt).toFixed(3):0,synthMs:Math.round(m.ms||0),sec:+buf.duration.toFixed(2)});
-  s.start(start); eng.endAt=start+buf.duration; eng.last=text; eng.live++;
-  lip.segs.push({t0:start,dur:buf.duration,tl:lipTimeline(m,text,tr.offset,buf.duration,tr.pcm)});
-  if(lip.segs.length>12) lip.segs.shift();
+  const now=ctx.currentTime, cont=eng.endAt>now-.05, gap=cont?pauseAfter(eng.last):0;
+  const start=Math.max(now+.06, eng.endAt+gap);
+  eng.stats.push({gap:+(start-Math.max(eng.endAt,now)).toFixed(3),late:eng.endAt>0&&cont===false&&eng.stats.length>0&&eng.last?+(now-eng.endAt).toFixed(3):0,synthMs:Math.round(m.ms||0),sec:+buf.duration.toFixed(2),lib:!m.ms});
+  s.start(start); eng.endAt=start+buf.duration; eng.last=m.text||''; eng.live++;
+  lip.segs.push({t0:start,dur:buf.duration,tl:lipTimeline(m,m.text||'',tr.offset+(m.pre||0),buf.duration,tr.pcm)});
+  if(lip.segs.length>16) lip.segs.shift();
   s.onended=()=>{ eng.live--; const i=eng.sources.indexOf(s); if(i>=0) eng.sources.splice(i,1); speechDone(); };
   eng.sources.push(s);
 }
-eng.sources=[];
 function stopSpeech(){
-  if(neural.worker&&neural.seq) neural.worker.postMessage({type:'cancel',upTo:neural.seq});
-  eng.tok++; eng.queue=[]; eng.busy=false; eng.endAt=0; eng.last='';
+  if(neural.worker&&eng.ids.length) neural.worker.postMessage({type:'cancel',ids:eng.ids.slice()});
+  eng.ids=[]; eng.tok++; eng.pend=[]; eng.ready=[]; eng.busy=false; eng.open=false; eng.hold=true; eng.endAt=0; eng.last='';
   for(const s of eng.sources){ try{ s.onended=null; s.stop(); }catch(e){} }
   eng.sources=[]; eng.live=0; lip.segs=[]; speechDone();
   if(hasTTS) speechSynthesis.cancel();
 }
 function sentences(t){ return (t.match(/[^.!?…]+[.!?…]*["”»]?\s*/g)||[t]).map(s=>s.trim()).filter(Boolean); }
-async function say(text){
+// mówi tylko w spoczynku (tam usta są zsynchronizowane): klip powitania płynnie przerywa, obieg dokumentu dokańcza
+async function ensureIdle(){
+  if(cur.loop) return;
+  if(cur.id==='greet'&&!busy.v){ queue=[]; setState(byId.idle,{soft:true}); await wait(480); return; }
+  for(let i=0;i<400&&!cur.loop;i++) await wait(100);
+}
+// przygotowanie wypowiedzi z wyprzedzeniem (np. ogłoszenie czekające w kolejce)
+async function prepareSpeech(text){
+  const lc=libChunks(text); if(lc) return lc;
+  if(neural.state!=='ready') return null;
+  const out=[];
+  for(const s of sentences(spokenPL(text))){ try{ const m=await synthNeural(s); m.text=s; out.push(m); }catch(e){ return null; } }
+  return out;
+}
+async function say(text,prepared){
   stopSpeech(); const tok=++sayTok;
   subtitle(text);
   const fin=()=>{ if(tok===sayTok) subTimer=setTimeout(()=>subtitle(''),600); };
-  if(voice.on&&voice.engine==='neural'&&neural.state==='ready'&&neural.ctx){
-    sentences(spokenPL(text)).forEach(enqueueSpeech);
-    await waitSpeech(); fin(); return;
+  if(voice.on&&voice.engine==='neural'&&neural.ctx){
+    if(!lib.idx){ try{ await Promise.race([loadLibrary(),wait(5000)]); }catch(e){} if(tok!==sayTok) return; }
+    const chunks=prepared||libChunks(text);
+    if(chunks||neural.state==='ready'){
+      await ensureIdle(); if(tok!==sayTok) return;
+      eng.open=false;
+      if(chunks){ eng.ready.push(...chunks.map(c=>({...c}))); flushSpeech(); }
+      else sentences(spokenPL(text)).forEach(enqueueSpeech);
+      await waitSpeech(); fin(); return;
+    }
   }
   if(voice.on&&hasTTS&&speechSynthesis.getVoices().length){
     const u=new SpeechSynthesisUtterance(text); u.lang='pl-PL'; if(voice.v) u.voice=voice.v; u.rate=voice.rate; u.pitch=voice.pitch;
@@ -582,16 +624,17 @@ async function say(text){
   }
   subTimer=setTimeout(()=>{ if(tok===sayTok) subtitle(''); },Math.max(2200,text.length*70));
 }
-// mowa „na żywo”: tekst dopływa kawałkami (odpowiedź Claude), zdania idą do kolejki, gdy są kompletne
+// odpowiedź dopływająca kawałkami (czat): zdania liczone w trakcie, dźwięk rusza, gdy całość gotowa
 function speechStream(){
   stopSpeech(); const tok=++sayTok; let done=0;
   const neuralOn=()=>voice.on&&voice.engine==='neural'&&neural.state==='ready'&&neural.ctx;
+  if(neuralOn()){ eng.open=true; ensureIdle(); }
   return {
     push(full){ if(tok!==sayTok) return; subtitle(full); if(!neuralOn()) return;
       const re=/[^.!?…]+[.!?…]+["”»]?(?=\s|$)/g; re.lastIndex=done; let m;
       while((m=re.exec(full))&&m.index>=done&&/\s/.test(full[re.lastIndex]||'')){ enqueueSpeech(spokenPL(m[0].trim())); done=re.lastIndex; } },
     async end(full){ if(tok!==sayTok) return; subtitle(full);
-      if(neuralOn()){ const rest=full.slice(done).trim(); if(rest) sentences(spokenPL(rest)).forEach(enqueueSpeech); await waitSpeech(); }
+      if(neuralOn()){ const rest=full.slice(done).trim(); if(rest) sentences(spokenPL(rest)).forEach(enqueueSpeech); eng.open=false; flushSpeech(); await waitSpeech(); }
       else await say(full);
       if(tok===sayTok) subTimer=setTimeout(()=>subtitle(''),600); }
   };
@@ -603,32 +646,38 @@ function noVoice(msg){
   stopSpeech(); subtitle(msg||'Nie udało się uruchomić głosu na tym urządzeniu.');
 }
 voiceBtn.onclick=async()=>{
+  clearInterval(greetIv);
   if(voice.on){ voice.on=false; voiceBtn.setAttribute('aria-pressed',false); voiceBtn.textContent='Włącz głos'; stopSpeech(); subtitle(''); return; }
   // kontekst audio tworzony w kliknięciu — odblokowuje dźwięk na telefonach i w aplikacji Claude
   try{ neural.ctx=neural.ctx||new (window.AudioContext||window.webkitAudioContext)(); await neural.ctx.resume(); }catch(e){}
-  voice.on=true; voiceBtn.setAttribute('aria-pressed',true);
-  if(voice.engine==='neural'&&neural.state!=='ready'){
-    voiceBtn.textContent='Ładuję głos…';
-    try{ await neuralInit(); }
-    catch(e){
-      if(hasTTS&&speechSynthesis.getVoices().length){ voice.engine='system'; loadVoices(); }
-      else { noVoice('Nie udało się wczytać głosu: '+(e.message||e)); return; }
-    }
+  voice.on=true; voiceBtn.setAttribute('aria-pressed',true); voiceBtn.textContent='Ładuję głos…';
+  const modelP=voice.engine==='neural'&&neural.state!=='ready'?neuralInit():Promise.resolve();
+  let libOk=false; try{ await loadLibrary(); libOk=true; }catch(e){}
+  if(!voice.on) return;
+  if(libOk){ if(neural.state==='ready') voiceBtn.textContent='Głos włączony'; if(!busy.v){ queue=[]; greetWithVoice(); } else say('Głos włączony.'); }
+  try{ await modelP; }
+  catch(e){
+    if(!libOk){ if(hasTTS&&speechSynthesis.getVoices().length){ voice.engine='system'; loadVoices(); } else { noVoice('Nie udało się wczytać głosu: '+(e.message||e)); return; } }
   }
   if(!voice.on) return;
   voiceBtn.textContent='Głos włączony';
-  if(!busy.v){ queue=[]; greetWithVoice(); } else say('Głos włączony.');
+  if(!libOk){ if(!busy.v){ queue=[]; greetWithVoice(); } else say('Głos włączony.'); }
+  // rozgrzewka: pierwsze liczenie w przeglądarce jest najwolniejsze — robimy je po cichu
+  if(neural.state==='ready') setTimeout(()=>{ synthNeural('Dzień dobry.').catch(()=>{}); },1500);
 };
 // w klipie powitania usta ruszają się ok. 2,2–3,6 s — kwestia startuje w tym oknie
 
+let greetIv=null;
 function greetWithVoice(){
+  clearInterval(greetIv);
   if(voice.on&&voice.engine==='neural'){ return say(greetLine()); }
+  // bez głosu: klip powitania z gestem i napisem w chwili, gdy w klipie ruszają się usta
   play(['greet']);
   const t0=performance.now();
-  const iv=setInterval(()=>{
+  greetIv=setInterval(()=>{
+    if(voice.on){ clearInterval(greetIv); return; }   // głos włączony w międzyczasie — powitanie powie już silnik mowy
     const v=[vA,vB].find(x=>x.style.opacity==='1'&&x.src.endsWith(byId.greet.src));
-    if(v&&v.currentTime>=2.1){ clearInterval(iv); say(greetLine()); }
-    else if(performance.now()-t0>5000){ clearInterval(iv); say(greetLine()); }
+    if((v&&v.currentTime>=2.1)||performance.now()-t0>5000){ clearInterval(greetIv); subtitle(greetLine()); subTimer=setTimeout(()=>subtitle(''),4200); }
   },60);
 }
 ['rate','pitch'].forEach(k=>{const el=document.getElementById('k'+k);el.oninput=()=>{voice[k]=+el.value/100;document.getElementById('o'+k).textContent=(+el.value/100).toFixed(2);};});
@@ -840,14 +889,17 @@ function logEvent(text){
   evq.log.unshift({t:new Date().toTimeString().slice(0,5),text}); evq.log=evq.log.slice(0,8);
   const el=document.getElementById('evLog'); if(el) el.innerHTML=evq.log.map(e=>`<li><span>${e.t}</span>${esc(e.text)}</li>`).join('');
 }
-function announce(text,status){ evq.queue.push({text,status}); logEvent(text); runEvents(); }
+function announce(text,status){ const e={text,status,prep:null}; e.prep=prepareLater(text); evq.queue.push(e); logEvent(text); runEvents(); }
+function prepareLater(text){ return voice.on&&voice.engine==='neural'?prepareSpeech(text).catch(()=>null):Promise.resolve(null); }
 async function runEvents(){
   if(evq.running) return; evq.running=true;
   while(evq.queue.length){
-    while(busy.v||chatBusy||eng.live>0||eng.busy||eng.queue.length) await wait(600);
+    while(busy.v||chatBusy||eng.live>0||eng.busy||eng.pend.length) await wait(600);
     const e=evq.queue.shift();
+    let prep=await e.prep; if(!prep&&voice.on) prep=await prepareLater(e.text);
+    while(busy.v||chatBusy||eng.live>0||eng.busy||eng.pend.length) await wait(300);
     if(e.status) setStatus(e.status);
-    await say(e.text);
+    await say(e.text,prep||undefined);
     await wait(500);
     if(!busy.v&&!chatBusy) setStatus(SAY[cur.id]);
   }
@@ -877,7 +929,7 @@ function workTick(active){
   if(now-wt.last>=BREAK_MS){
     const away=Math.round((now-wt.last)/60000);
     wt.start=now; wt.reminded=0;
-    if(away>=20&&away<12*60) announce(pick([`Witaj z powrotem! Nie było cię ${godziny(away)}.`,'Witaj z powrotem. Wszystko czeka na swoim miejscu.']),'Wita');
+    if(away>=20&&away<12*60) announce(pick(['Witaj z powrotem! Wszystko czeka na swoim miejscu.','Witaj z powrotem. Dobrze, że jesteś.','O, jesteś! Witaj z powrotem.']),'Wita');
   }
   if(active||document.visibilityState==='visible') wt.last=now;
   const streak=Math.floor((now-wt.start)/60000);
@@ -885,8 +937,7 @@ function workTick(active){
     wt.reminded=Math.floor(streak/wt.every);
     announce(pick([
       `Pracujesz już ${godziny(streak)} bez przerwy. Może zrobisz sobie krótką przerwę?`,
-      `Hej, to już ${godziny(streak)} bez przerwy. Wstań na chwilę, napij się wody.`,
-      `Minęło ${godziny(streak)} bez przerwy. Pięć minut odpoczynku dobrze ci zrobi.`]),'Przypomina o przerwie');
+      `Hej, to już ${godziny(streak)} bez przerwy. Wstań na chwilę, napij się wody.`]),'Przypomina o przerwie');
   }
   store('egzo-praca',wt); renderWork();
 }

@@ -41,7 +41,7 @@ with sync_playwright() as p:
     t0 = time.time()
     while time.time() - t0 < 30:
         pg.wait_for_timeout(300)
-        if pg.evaluate("()=>eng.live===0&&!eng.busy&&!eng.queue.length&&eng.stats.length>=4"): break
+        if pg.evaluate("()=>eng.live===0&&!eng.busy&&!eng.pend.length&&eng.stats.length>=4"): break
     st = pg.evaluate("()=>eng.stats")
     print('T2', json.dumps(st))
     print('T2 przerwy między zdaniami [s]:', [s['gap'] for s in st[1:]], '| spóźnienia syntezy:', [s['late'] for s in st])
@@ -60,7 +60,7 @@ with sync_playwright() as p:
     # T4 — zrzuty ust podczas mowy z opisem głoski (po zakończeniu poprzedniej mowy)
     for i in range(40):
         pg.wait_for_timeout(300)
-        if pg.evaluate("()=>eng.live===0&&!eng.busy&&!eng.queue.length"): break
+        if pg.evaluate("()=>eng.live===0&&!eng.busy&&!eng.pend.length"): break
     pg.evaluate("()=>{ say('Mama ma moc. Basia pije mleko i je owoce.'); }")
     pg.wait_for_timeout(400)
     shots = []

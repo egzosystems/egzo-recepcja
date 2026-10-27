@@ -64,6 +64,15 @@
 - Testy w Studiu: „Test: nowy e-mail”, „Test: 5 h bez przerwy”, „Test: powrót”; `tests/test_zdarzenia.py` (kolejkowanie w trakcie obsługi dokumentu).
 - Ograniczenie: działa, gdy strona jest otwarta (w tle telefon ją usypia); głos po każdym otwarciu wymaga jednego stuknięcia „Włącz głos”.
 
+## Mowa bez przerw (wersja 6) — poprawki po teście na telefonie
+- Problem 1: głos startował, gdy jeszcze leciał klip powitania → nakładka ust wyłączona (usta „zamknięte”). Teraz przed mówieniem ona przechodzi do spoczynku: klip powitania przerywany przenikaniem, obieg dokumentu dokańczany.
+- Problem 2: przerwa po „Dzień dobry” — telefon liczył drugie zdanie wolniej, niż silnik przewidział. Teraz:
+  - biblioteka 39 gotowych kwestii (`voice/frazy.wav` 6,1 MB + `frazy.json`, `tools/generuj_frazy.py`): powitania, obieg dokumentu, przypomnienia o przerwie (1–8 h), „witaj z powrotem”, Gmail — odtwarzane od razu, przed pobraniem modelu;
+  - kwestie zmienne: dźwięk rusza dopiero, gdy cała wypowiedź jest policzona (czat: całość albo ≥ 6 s zapasu); ogłoszenia liczone z wyprzedzeniem w kolejce;
+  - anulowanie w wątku głosu po identyfikatorach konkretnej wypowiedzi; rozgrzewka modelu po cichu.
+- Usunięte podwójne powitanie (licznik cichego powitania przy otwarciu strony).
+- Testy (Chromium, ekran telefonu, procesor 4× wolniejszy): powitanie 0,5 s po stuknięciu, raz, ruch ust od pierwszego słowa, pauzy 0,26–0,32 s; kwestie zmienne bez spóźnień (pauzy 0,26 s), start czatu ok. 5,5 s na wolnym urządzeniu (ok. 3,5 s na komputerze).
+
 ## Plan
 1. Ujęcia obiegu: 05 odczyt, 06 analiza, 08 segregowanie, 12 odłożenie (prompty w `docs/ujecia.md`).
 2. Poprawki logo na ścianie → nowy kadr bazowy (wtedy klipy generujemy już z niego).

@@ -123,11 +123,12 @@ self.onmessage = async e => {
     try { initP = initP || init(m.voice); await initP; postMessage({ type: 'ready' }); }
     catch (err) { initP = null; postMessage({ type: 'error', message: String(err && err.message || err) }); }
   } else if (m.type === 'cancel') {
-    cancelUpTo = Math.max(cancelUpTo, m.upTo || 0);
+    if (m.upTo) cancelUpTo = Math.max(cancelUpTo, m.upTo);
+    if (m.ids) for (const id of m.ids) cancelled.add(id);
   } else if (m.type === 'speak') {
     // jedna synteza naraz (sesja ONNX nie obsługuje równoległych wywołań); przerwane wypowiedzi pomijane
     chain = chain.then(async () => {
-      if (m.id <= cancelUpTo) { postMessage({ type: 'error', id: m.id, message: 'anulowano' }); return; }
+      if (m.id <= cancelUpTo || cancelled.has(m.id)) { cancelled.delete(m.id); postMessage({ type: 'error', id: m.id, message: 'anulowano' }); return; }
       try {
         await initP;
         const r = await synth(m.text, m.rate);
@@ -136,4 +137,4 @@ self.onmessage = async e => {
     });
   }
 };
-let chain = Promise.resolve(), cancelUpTo = 0;
+let chain = Promise.resolve(), cancelUpTo = 0; const cancelled = new Set();

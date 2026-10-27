@@ -14,7 +14,7 @@ with sync_playwright() as p:
     t0=time.time()
     while time.time()-t0<60:
         pg.wait_for_timeout(500)
-        if pg.evaluate("()=>eng.live===0&&!eng.busy&&!eng.queue.length&&eng.stats.length>=4"): break
+        if pg.evaluate("()=>eng.live===0&&!eng.busy&&!eng.pend.length&&eng.stats.length>=4"): break
     st=pg.evaluate("()=>[eng.stats, +eng.rtf.toFixed(2), +(eng.sources.length)]")
     print('4x wolniej:', json.dumps(st[0])); print('tempo syntezy (s na 1 s mowy):', st[1])
     print('pierwszy dźwięk po', round(st[0][0]['gap']+0,2) if st[0] else None)
