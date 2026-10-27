@@ -6,11 +6,15 @@ metoda liczy tor pętli (gdzie rysować) i wyrównuje klatki biblioteki (co ryso
 znoszą i usta nie przekrzywiają się względem twarzy. (Pas policzków/oczu daje inny kąt, bo głowa jest też
 lekko odwrócona w bok — tego nie używamy.)
 
+Poza głowy: każda klatka dostaje wektor pozy (4 liczby, z wyglądu głowy bez ust). Strona wkleja usta
+tylko z klatek o pozie zbliżonej do obrazu na ekranie — wtedy kąt ust zgadza się z twarzą także przy
+przechylaniu i odwracaniu głowy (czego płaskie przekształcenie samo nie odda).
+
 Wyniki (w KATALOG_WYJ):
   usta-tor.json     — dla każdej klatki pętli spoczynkowej: [x, y, skala, jakość, kąt°, [a,b,c,d,e,f]]
-                      (a..f: kadr bazowy → klatka, do canvas.setTransform)
+                      (a..f: kadr bazowy → klatka, do canvas.setTransform); poza.idle: wektor pozy klatki
   usta-klatki.webp  — prawdziwe klatki dolnej części twarzy w układzie kadru bazowego (RGBA)
-  usta-klatki.json  — {tileW, tileH, x0, y0, cols, frames:[{src,i,open,teeth}], next:[...]}
+  usta-klatki.json  — {tileW, tileH, x0, y0, cols, frames:[{src,i,open,teeth}], poza:[...], next:[...]}
 
 Użycie:
   python3 -I tools/zbuduj_mowe.py KADR.jpg PĘTLA.mp4 KATALOG_WYJ [KLIP_MÓWIENIA.mp4 ...] [NAZWA=KLIP_POZY.mp4 ...]
@@ -78,26 +82,42 @@ tory = {'fps': 24, 'mouth0': [MX, MY], 'metoda': 'ECC na okolicy ust i brody (ta
 for name, path in poses:
     print(f'poza {name}:'); pr = track_clip(path)
     tory[name] = tor_of(smooth([t for t, _, _ in pr]), [n for _, n, _ in pr])
+
+# --- 2) POZA GŁOWY każdej klatki (z wyglądu głowy bez ust: oczy, nos, policzki, kontur twarzy)
+# Usta wklejamy tylko z klatek o podobnej pozie — płaskie przekształcenie nie odda obrotu głowy w przestrzeni,
+# a przy podobnej pozie błąd kąta ust spada z ~5° (do 11°) do ~0,4°.
+def pose_feat(fr, mx, my):
+    g = cv2.cvtColor(fr, cv2.COLOR_BGR2GRAY)[60:320, 450:720].astype(np.float32)
+    bx, by = int(mx) - 450, int(my) - 60
+    g[max(0, by - 18):by + 22, max(0, bx - 42):bx + 42] = 0     # usta wyłączone
+    return cv2.resize(cv2.GaussianBlur(g, (0, 0), 4), (34, 32)).ravel()
+Fi = np.array([pose_feat(fr, t[0], t[1]) for (_, _, fr), t in zip(idle, tor)])
+mu = Fi.mean(0); U, sv, Vt = np.linalg.svd(Fi - mu, full_matrices=False)
+B = Vt[:4]
+Pi = (Fi - mu) @ B.T
+unit = float(np.median(np.linalg.norm(Pi[1:] - Pi[:-1], axis=1)))   # 1 = typowa zmiana pozy między klatkami
+Pi /= unit
+project = lambda fr, mx, my: ((pose_feat(fr, mx, my) - mu) @ B.T) / unit
+print(f'poza: 4 składowe ({(sv[:4]**2 / (sv**2).sum()).sum():.0%} zmienności)')
+tory['poza'] = {'idle': [[round(float(v), 2) for v in p] for p in Pi]}
 os.makedirs(out_dir, exist_ok=True)
 json.dump(tory, open(os.path.join(out_dir, 'usta-tor.json'), 'w'), separators=(',', ':'))
 
-# --- 2) biblioteka prawdziwych klatek dolnej części twarzy
+# --- 3) biblioteka prawdziwych klatek dolnej części twarzy (co STEP-ta klatka pętli + klipy mówienia)
+STEP = 2
 X0, Y0, TW, TH = 518, 188, 128, 116
 yy, xx = np.mgrid[0:TH, 0:TW].astype(np.float32)
 cx, cy = MX - X0, MY - Y0 + 14
 ell = ((xx - cx) / 56) ** 2 + ((yy - cy) / 50) ** 2
 mask = np.clip((1 - ell) / 0.45, 0, 1) ** 1.3
-ring = (ell > 0.6) & (ell < 1.0)
 ang0 = np.radians(-9.5)
 EX = ((xx - (MX - X0)) * np.cos(ang0) - (yy - (MY - Y0)) * np.sin(ang0)) / 30
 EY = ((xx - (MX - X0)) * np.sin(ang0) + (yy - (MY - Y0)) * np.cos(ang0)) / 16
 mouth = (EX ** 2 + (EY - 0.35) ** 2) < 1
 refc = ref_bgr[Y0:Y0 + TH, X0:X0 + TW]
-rl = cv2.cvtColor(refc, cv2.COLOR_BGR2LAB).astype(np.float32)
-skinL = float(rl[..., 0][ring].mean())
+skinL = float(cv2.cvtColor(refc, cv2.COLOR_BGR2LAB)[..., 0][(ell > 0.6) & (ell < 1.0)].mean())
 
 def crop_of(fr, T):
-    # piksel wycinka (u,v) → kadr bazowy (X0+u, Y0+v) → klatka (przez T)
     Mc = np.float32([[T[0, 0], T[0, 1], T[0, 0] * X0 + T[0, 1] * Y0 + T[0, 2]],
                      [T[1, 0], T[1, 1], T[1, 0] * X0 + T[1, 1] * Y0 + T[1, 2]]])
     return cv2.warpAffine(fr, Mc, (TW, TH), flags=cv2.INTER_CUBIC | cv2.WARP_INVERSE_MAP, borderMode=cv2.BORDER_REPLICATE)
@@ -105,54 +125,31 @@ def crop_of(fr, T):
 def features(crop):
     lab = cv2.cvtColor(crop, cv2.COLOR_BGR2LAB).astype(np.float32)
     L, a = lab[..., 0], lab[..., 1]
-    dark = (L < skinL * 0.5) & mouth
-    teeth = (L > skinL * 1.1) & (a < 140) & mouth
-    return float(dark.sum()), float(teeth.sum())
+    return float(((L < skinL * 0.5) & mouth).sum()), float(((L > skinL * 1.1) & (a < 140) & mouth).sum())
 
-cands = []
-sources = [(os.path.basename(idle_p), [(T, n, fr) for (T, n), (_, _, fr) in zip(zip(Ts, nin), idle)])]
+frames = []
+for i in range(0, len(idle), STEP):
+    T, n, fr = Ts[i], nin[i], idle[i][2]
+    if n < 0.85: continue
+    c = crop_of(fr, T); o, t = features(c)
+    frames.append(dict(src=os.path.basename(idle_p), i=i, open=o, teeth=t, crop=c, poza=Pi[i]))
 for p in extra:
     tr = track_clip(p); sm = smooth([t for t, _, _ in tr])
-    sources.append((os.path.basename(p), [(T, n, fr) for (T, n), (_, _, fr) in zip(zip(sm, [n for _, n, _ in tr]), tr)]))
-for name, frames in sources:
-    for i, (T, n, fr) in enumerate(frames):
-        c = crop_of(fr, T)
-        diff = float(np.abs(c.astype(np.float32) - refc.astype(np.float32)).mean(axis=2)[ring & ~mouth].mean())
-        rot = math.degrees(math.atan2(T[1, 0], T[0, 0]))
-        o, t = features(c)
-        cands.append(dict(src=name, i=i, n=n, diff=diff, rot=rot, open=o, teeth=t, crop=c))
-good = [c for c in cands if c['n'] >= 0.85 and c['diff'] < 24]
-print('klatek', len(cands), '| dobrych', len(good))
-for c in good:   # kolor jak w kadrze bazowym
-    lab = cv2.cvtColor(c['crop'], cv2.COLOR_BGR2LAB).astype(np.float32)
-    for ch in range(3):
-        a, b = lab[..., ch][ring], rl[..., ch][ring]
-        lab[..., ch] = (lab[..., ch] - a.mean()) * min(1.15, max(0.85, b.std() / max(a.std(), 1e-3))) + b.mean()
-    c['crop'] = cv2.cvtColor(np.clip(lab, 0, 255).astype(np.uint8), cv2.COLOR_LAB2BGR)
-omax = max(1.0, np.percentile([c['open'] for c in good], 98)); tmax = max(1.0, np.percentile([c['teeth'] for c in good], 98))
-for c in good:
-    c['fo'] = min(1.0, c['open'] / omax); c['ft'] = min(1.0, c['teeth'] / tmax)
-sel = set()
-for oi in range(10):
-    for ti in range(4):
-        cell = [k for k, c in enumerate(good) if int(min(9, c['fo'] * 10)) == oi and int(min(3, c['ft'] * 4)) == ti]
-        cell.sort(key=lambda k: good[k]['diff'])
-        for k in cell[:3]:
-            sel.add(k)
-            for d in (-2, -1, 1, 2):
-                j = k + d
-                if 0 <= j < len(good) and good[j]['src'] == good[k]['src'] and good[j]['i'] - good[k]['i'] == d:
-                    sel.add(j)
-sel = sorted(sel); frames = [good[k] for k in sel]
+    for i, ((_, n, fr), T) in enumerate(zip(tr, sm)):
+        if n < 0.85: continue
+        mx, my = T @ np.float32([MX, MY, 1]); c = crop_of(fr, T); o, t = features(c)
+        frames.append(dict(src=os.path.basename(p), i=i, open=o, teeth=t, crop=c, poza=project(fr, mx, my)))
+omax = max(1.0, np.percentile([f['open'] for f in frames], 98)); tmax = max(1.0, np.percentile([f['teeth'] for f in frames], 98))
 idx = {(f['src'], f['i']): n for n, f in enumerate(frames)}
-nxt = [idx.get((f['src'], f['i'] + 1), -1) for f in frames]
-cols = 12; rows = (len(frames) + cols - 1) // cols
+nxt = [idx.get((f['src'], f['i'] + (STEP if f['src'] == os.path.basename(idle_p) else 1)), -1) for f in frames]
+cols = 16; rows = (len(frames) + cols - 1) // cols
 grid = np.zeros((rows * TH, cols * TW, 4), np.uint8)
 for n, f in enumerate(frames):
     r, cc = divmod(n, cols)
     grid[r * TH:(r + 1) * TH, cc * TW:(cc + 1) * TW] = np.dstack([f['crop'], (mask * 255).astype(np.uint8)])
-cv2.imwrite(os.path.join(out_dir, 'usta-klatki.webp'), grid, [cv2.IMWRITE_WEBP_QUALITY, 93])
+cv2.imwrite(os.path.join(out_dir, 'usta-klatki.webp'), grid, [cv2.IMWRITE_WEBP_QUALITY, 90])
 json.dump({'tileW': TW, 'tileH': TH, 'x0': X0, 'y0': Y0, 'cols': cols,
-           'frames': [{'src': f['src'], 'i': f['i'], 'open': round(f['fo'], 3), 'teeth': round(f['ft'], 3)} for f in frames],
+           'frames': [{'src': f['src'], 'i': f['i'], 'open': round(min(1.0, f['open'] / omax), 3), 'teeth': round(min(1.0, f['teeth'] / tmax), 3)} for f in frames],
+           'poza': [[round(float(v), 2) for v in f['poza']] for f in frames],
            'next': nxt}, open(os.path.join(out_dir, 'usta-klatki.json'), 'w'), separators=(',', ':'))
-print('biblioteka klatek:', len(frames), '| ciągi:', sum(1 for x in nxt if x >= 0))
+print('biblioteka klatek:', len(frames), '| ciągi:', sum(1 for x in nxt if x >= 0), '| plik', os.path.getsize(os.path.join(out_dir, 'usta-klatki.webp')) // 1024, 'KB')

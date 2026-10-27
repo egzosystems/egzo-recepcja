@@ -94,6 +94,13 @@ function lipTargets(m,offset,total,pcm){
     else o=OPEN_T[g.v]??.5;
     tg[i]=Math.min(1,o*(.75+.45*env[i]));        // głośniej = szerzej
   }
+  // krótkie głoski (krótsze niż krok ust 40 ms) nie mogą wypaść między krokami: m/b/p zawsze domyka usta,
+  // samogłoski otwarte zawsze się otwierają; tym krokom dajemy większą wagę przy doborze klatek
+  const wt=new Float32Array(n).fill(1);
+  for(const s of seg){ if(s.v!=='MBP'&&s.v!=='A'&&s.v!=='O') continue;
+    const i=Math.round((s.t0+s.t1)/2*LIP_FPS-.5); if(i<0||i>=n) continue;
+    if(s.v==='MBP'){ tg[i]=0; wt[i]=3; } else { tg[i]=Math.max(tg[i],OPEN_T[s.v]*(.75+.45*env[i])); wt[i]=2; } }
+  tg.wt=wt;
   return tg;
 }
 
@@ -196,7 +203,7 @@ function utworz(opt){
     const start=Math.max(now+.06, eng.endAt+gap);
     eng.stats.push({gap:+(start-Math.max(eng.endAt,now)).toFixed(3),late:eng.endAt>0&&cont===false&&eng.stats.length>0&&eng.last?+(now-eng.endAt).toFixed(3):0,synthMs:Math.round(m.ms||0),sec:+buf.duration.toFixed(2),lib:!m.ms});
     s.start(start); eng.endAt=start+buf.duration; eng.last=m.text||''; eng.live++;
-    lip.segs.push({t0:start,dur:buf.duration,tl:lipTimeline(m,tr.offset+(m.pre||0),buf.duration,tr.pcm)});
+    lip.segs.push({t0:start,dur:buf.duration,tl:lipTimeline(m,tr.offset+(m.pre||0),buf.duration,tr.pcm,start)});
     if(lip.segs.length>16) lip.segs.shift();
     s.onended=()=>{ eng.live--; const i=eng.sources.indexOf(s); if(i>=0) eng.sources.splice(i,1); speechDone(); };
     eng.sources.push(s);
@@ -254,44 +261,85 @@ function utworz(opt){
     };
   }
 
-  /* ----- usta: prawdziwe klatki dolnej części twarzy, wyrównane do kadru bazowego ----- */
-  const lip={img:null,lib:null,tory:{},segs:[],alpha:0,cur:-1,last:null,canvas:o.canvas,ctx:o.canvas?o.canvas.getContext('2d'):null,ready:null};
+  /* ----- usta: prawdziwe klatki dolnej części twarzy, wyrównane do kadru bazowego -----
+     Każda klatka ust ma POZĘ GŁOWY, z której pochodzi. Wklejamy tylko usta z klatek o pozie bliskiej
+     obrazowi na ekranie — płaskie przekształcenie nie odda obrotu głowy w przestrzeni, więc usta z innej
+     pozy byłyby krzywe (do 10°); przy bliskiej pozie błąd kąta < 1°. */
+  const POSE_FREE=6, POSE_W=.03, POSE_MAX=16, K_CAND=40;
+  const lip={img:null,lib:null,tory:{},segs:[],alpha:0,cur:-1,last:null,canvas:o.canvas,ctx:o.canvas?o.canvas.getContext('2d'):null,ready:null,fixes:0,frame:-1,diag:{n:0,off:0,maxOff:0}};
   lip.ready=(async()=>{ try{
     const [libj,track]=await Promise.all([fetch(o.bazaUst+'usta-klatki.json').then(r=>r.json()),fetch(o.bazaUst+'usta-tor.json').then(r=>r.json())]);
     const img=new Image(); img.src=o.bazaUst+'usta-klatki.webp'; await img.decode();
-    lip.lib=libj; lip.fps=track.fps||24; lip.img=img;
+    lip.fps=track.fps||24;
     for(const k in track) if(Array.isArray(track[k])&&Array.isArray(track[k][0])) lip.tory[k]=track[k];   // tor dla każdego klipu (idle, kolejne pozy…)
     lip.track=lip.tory.idle;
     lip.open=Float32Array.from(libj.frames.map(f=>f.open)); lip.next=Int16Array.from(libj.next);
     lip.closed=lip.open.indexOf(Math.min(...lip.open));
-  }catch(e){ lip.img=null; } })();
-  // wybór klatek (Viterbi): koszt = różnica otwarcia + skok między nienastępującymi po sobie klatkami
-  function lipSelect(tg){
-    const N=lip.open.length, T=tg.length, cost=new Float32Array(N), back=new Int16Array(T*N);
-    for(let f=0;f<N;f++) cost[f]=Math.abs(lip.open[f]-tg[0])+(f===lip.closed?0:.05);
-    const nc=new Float32Array(N);
-    for(let t=1;t<T;t++){
-      for(let f=0;f<N;f++){
-        let best=1e9,bi=0;
-        for(let g=0;g<N;g++){
-          const tr=lip.next[g]===f?0:(g===f?.03:.08+.25*Math.abs(lip.open[g]-lip.open[f]));
-          const c=cost[g]+tr; if(c<best){best=c;bi=g;}
-        }
-        nc[f]=best+Math.abs(lip.open[f]-tg[t]); back[t*N+f]=bi;
-      }
-      cost.set(nc);
+    const PL=track.poza&&track.poza.idle, PT=libj.poza;
+    if(PL&&PT&&PT.length===libj.frames.length){
+      // odległość pozy: każda klatka ust × każda klatka pętli; dla każdej klatki pętli K najbliższych klatek ust
+      const nL=PL.length, nT=PT.length, Dm=new Float32Array(nT*nL);
+      for(let t=0;t<nT;t++) for(let j=0;j<nL;j++){ let s=0; for(let d=0;d<PT[t].length;d++){ const x=PT[t][d]-PL[j][d]; s+=x*x; } Dm[t*nL+j]=Math.sqrt(s); }
+      const k=Math.min(K_CAND,nT), cand=new Int16Array(nL*k), clen=new Uint8Array(nL), ids=[...Array(nT).keys()];
+      for(let j=0;j<nL;j++){ ids.sort((a,b)=>Dm[a*nL+j]-Dm[b*nL+j]); let n=0;
+        for(let q=0;q<k;q++){ if(q>=6&&Dm[ids[q]*nL+j]>POSE_MAX) break; cand[j*k+q]=ids[q]; n++; } clen[j]=n; }
+      lip.D=Dm; lip.nL=nL; lip.K=k; lip.cand=cand; lip.clen=clen;
     }
-    let f=0; for(let g=1;g<N;g++) if(cost[g]<cost[f]) f=g;
-    const out=new Int16Array(T); for(let t=T-1;t>=0;t--){ out[t]=f; f=back[t*N+f]; }
+    lip.lib=libj; lip.img=img;
+  }catch(e){ lip.img=null; } })();
+  const poseCost=(f,j)=>{ const d=lip.D[f*lip.nL+j]; return d>POSE_FREE?(d-POSE_FREE)*POSE_W:0; };
+  // dokładny czas WYŚWIETLANEJ klatki wideo (requestVideoFrameCallback), inaczej currentTime
+  function videoTime(v){
+    if(v.requestVideoFrameCallback&&!v.__mowaRvfc){ v.__mowaRvfc=true; const cb=(now,md)=>{ v.__mowaMT=md.mediaTime; v.__mowaAt=performance.now(); v.requestVideoFrameCallback(cb); }; v.requestVideoFrameCallback(cb); }
+    if(v.__mowaMT!=null&&!v.paused&&performance.now()-v.__mowaAt<150&&Math.abs(v.__mowaMT-v.currentTime)<.3) return v.__mowaMT;
+    return v.currentTime;
+  }
+  // które klatki pętli będą na ekranie w kolejnych krokach ust (od chwili `start` karty dźwiękowej)
+  function predictFrames(start,n){
+    const L=lip.nL, fps=lip.fps, dur=L/fps, w=o.wideo()||{}, now=neural.ctx.currentTime;
+    const base=(w.klip==='idle'&&w.el?videoTime(w.el):0)+(start-now);   // inna scena → pętla zacznie od początku
+    const js=new Int16Array(n);
+    for(let i=0;i<n;i++){ let tt=(base+(i+.5)/LIP_FPS)%dur; if(tt<0) tt+=dur; js[i]=Math.min(L-1,Math.floor(tt*fps)); }
+    return js;
+  }
+  // wybór klatek (Viterbi): koszt = różnica otwarcia + odejście od pozy na ekranie + skok między nienastępującymi klatkami
+  function lipSelect(tg,js){
+    const T=tg.length, open=lip.open, nx=lip.next, wt=tg.wt||new Float32Array(T).fill(1);
+    const step=(cur,prev,cost,nc,back,t,pose,k)=>{
+      for(let q=0;q<cur.length;q++){ const f=cur[q]; let best=1e9,bi=0;
+        for(let r=0;r<prev.length;r++){ const g=prev[r]; const c=cost[r]+(nx[g]===f?0:(g===f?.03:.08+.25*Math.abs(open[g]-open[f]))); if(c<best){best=c;bi=r;} }
+        nc[q]=best+wt[t]*Math.abs(open[f]-tg[t])+(pose?poseCost(f,js[t]):0); back[t*k+q]=bi; }
+    };
+    const pose=!!(lip.cand&&js), k=pose?lip.K:open.length;
+    const all=Int16Array.from({length:open.length},(_,i)=>i);
+    const setAt=t=>pose?lip.cand.subarray(js[t]*k,js[t]*k+lip.clen[js[t]]):all;
+    let prev=setAt(0); const states=new Int16Array(T*k), back=new Int16Array(T*k);
+    let cost=new Float32Array(k), nc=new Float32Array(k); states.set(prev,0);
+    for(let q=0;q<prev.length;q++){ const f=prev[q]; cost[q]=wt[0]*Math.abs(open[f]-tg[0])+(pose?poseCost(f,js[0]):(f===lip.closed?0:.05)); }
+    for(let t=1;t<T;t++){ const cur=setAt(t); states.set(cur,t*k); step(cur,prev,cost,nc,back,t,pose,k); const x=cost; cost=nc; nc=x; prev=cur; }
+    let q=0; for(let r=1;r<prev.length;r++) if(cost[r]<cost[q]) q=r;
+    const out=new Int16Array(T); for(let t=T-1;t>=0;t--){ out[t]=states[t*k+q]; q=back[t*k+q]; }
     return out;
   }
-  function lipTimeline(m,offset,total,pcm){
+  function lipTimeline(m,offset,total,pcm,start){
     if(!lip.lib) return new Int16Array(Math.max(1,Math.ceil(total*LIP_FPS))).fill(-1);
-    return lipSelect(lipTargets(m,offset,total,pcm));
+    const tg=lipTargets(m,offset,total,pcm), js=lip.cand&&start!=null?predictFrames(start,tg.length):null;
+    const tl=lipSelect(tg,js); tl.js=js; return tl;
+  }
+  // najbardziej zamknięte usta wśród klatek o pozie zgodnej z klatką pętli j
+  function closedAt(j){ const k=lip.K, b=j*k; let best=lip.cand[b]; for(let q=1;q<lip.clen[j];q++){ const g=lip.cand[b+q]; if(lip.open[g]<lip.open[best]) best=g; } return best; }
+  // zabezpieczenie przy rysowaniu: gdy wideo odjechało od przewidywania (przycięcie, przewinięcie),
+  // klatkę ust z daleka w pozie zamieniamy na najbliższą w pozie o podobnym otwarciu
+  function poseFix(f,j){
+    if(f<0||!lip.cand||j<0) return f;
+    const k=lip.K, b=j*k, lim=Math.max(POSE_MAX,lip.D[lip.cand[b+lip.clen[j]-1]*lip.nL+j])+3;   // granica doboru + zapas na ±1 klatkę
+    if(lip.D[f*lip.nL+j]<=lim) return f; let best=lip.cand[b], bc=1e9;
+    for(let q=0;q<lip.clen[j];q++){ const g=lip.cand[b+q], c=Math.abs(lip.open[g]-lip.open[f])+poseCost(g,j); if(c<bc){bc=c;best=g;} }
+    lip.fixes++; return best;
   }
   function lipFrameAt(t){
-    for(const s of lip.segs){ if(t>=s.t0&&t<s.t0+s.dur){ const pos=(t-s.t0)*LIP_FPS, k=Math.floor(pos);
-      return {a:s.tl[Math.min(s.tl.length-1,k)], b:s.tl[Math.min(s.tl.length-1,k+1)], f:pos-k}; } }
+    for(const s of lip.segs){ if(t>=s.t0&&t<s.t0+s.dur){ const pos=(t-s.t0)*LIP_FPS, k=Math.floor(pos), kk=Math.min(s.tl.length-1,k);
+      return {a:s.tl[kk], b:s.tl[Math.min(s.tl.length-1,k+1)], f:pos-k, j:s.tl.js?s.tl.js[kk]:-1}; } }
     return null;
   }
   function drawLipTile(c,idx,alpha,x0,y0){
@@ -306,13 +354,15 @@ function utworz(opt){
     if(gra!==mowi){ mowi=gra; emit('mowi',mowi); }
     if(!lip.img||!c) return;
     const w=o.wideo()||{}, v=w.el, track=w.klip&&lip.tory[w.klip];
-    let speaking=false, fa=lip.closed, fb=lip.closed, ff=0;
+    let speaking=false, fa=lip.closed, fb=lip.closed, ff=0, pj=-1;
     if(track&&lip.segs.length&&neural.ctx){
       const x=lipFrameAt(ct+o.wyprzedzenie);   // obraz wyprzedza dźwięk o 40 ms
-      if(x&&x.a>=0){ speaking=true; fa=x.a; fb=x.b; ff=x.f; }
+      if(x&&x.a>=0){ speaking=true; fa=x.a; fb=x.b; ff=x.f; pj=x.j; }
       else if(lip.segs.some(s=>ct<s.t0+s.dur+.25)) speaking=true;
     }
-    const tr=track&&v?track[Math.min(track.length-1,Math.max(0,Math.round(v.currentTime*lip.fps)))]:null;
+    const fi=track&&v?Math.min(track.length-1,Math.max(0,Math.round(videoTime(v)*lip.fps))):-1, tr=fi>=0?track[fi]:null;
+    lip.frame=fi;
+    if(pj>=0&&fi>=0){ let d=Math.abs(pj-fi); d=Math.min(d,lip.nL-d); const g=lip.diag; g.n++; g.off+=d; g.maxOff=Math.max(g.maxOff,d); }   // trafność przewidywania klatki
     if(!tr||tr[3]<.6) speaking=false;
     lip.alpha+=((speaking?1:0)-lip.alpha)*(speaking?.4:.15);
     if(lip.last){ c.setTransform(1,0,0,1,0,0); c.clearRect(lip.last[0]-3,lip.last[1]-3,lip.last[2]+6,lip.last[3]+6); lip.last=null; }
@@ -324,6 +374,10 @@ function utworz(opt){
     lip.last=[bx0,by0,bx1-bx0,by1-by0];
     c.setTransform(A,B,Cc,D,E,F);
     if(!speaking){ fa=fb=lip.cur>=0?lip.cur:lip.closed; ff=0; }
+    if(w.klip==='idle'&&lip.cand&&fi>=0){
+      if(speaking&&pj<0){ fa=fb=closedAt(fi); ff=0; }   // krótka pauza między zdaniami: zamknięte usta w tej samej pozie
+      else { fa=poseFix(fa,fi); fb=poseFix(fb,fi); }
+    }
     drawLipTile(c,fa,lip.alpha,x0,y0);
     if(fb!==fa&&ff>.05) drawLipTile(c,fb,lip.alpha*ff,x0,y0);   // przejście do następnej prawdziwej klatki
     lip.cur=fa; c.globalAlpha=1; c.setTransform(1,0,0,1,0,0);
@@ -369,7 +423,7 @@ function utworz(opt){
     glosySystemowe,
     gotoweUsta:()=>lip.ready,
     // dla testów i diagnostyki
-    wnetrze:{eng,neural,lip,lib,voice,lipFrameAt,lipShapeAt:t=>{ const x=lipFrameAt(t); return x?x.a:null; },lipTimeline,trimSilence,phonesFromChars,synthNeural,loadLibrary}
+    wnetrze:{eng,neural,lip,lib,voice,lipFrameAt,poseFix,predictFrames,videoTime,lipShapeAt:t=>{ const x=lipFrameAt(t); return x?x.a:null; },lipTimeline,trimSilence,phonesFromChars,synthNeural,loadLibrary}
   };
   if(hasTTS) speechSynthesis.addEventListener?.('voiceschanged',()=>emit('glosy',glosySystemowe()));
   return api;

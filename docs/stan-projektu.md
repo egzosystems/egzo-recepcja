@@ -103,6 +103,14 @@
 - `tools/zbuduj_strone.py` — wbudowuje bibliotekę w stronę artefaktu i tworzy `index.html` repo.
 - `tests/test_mowa.py` — 10 sprawdzeń przez interfejs biblioteki (m/b/p zamknięte, „a” otwarte, pauzy 0,26 s, bez spóźnień, strumień, zdarzenia, przygotowanie, stop).
 
+## Usta zgodne z pozą głowy (wersja 11)
+- Diagnoza (pomiar w całej pętli): kadr startowy to głowa przechylona o ok. 17° i odwrócona w bok, a przez większość pętli twarz jest prosto. Usta wklejane z klatki o innej pozie miały kąt różny od twarzy średnio o 5°, do 11° — to było „krzywienie przy przechylaniu”.
+- Naprawa: każda klatka (pętli i biblioteki) ma wektor pozy głowy; dobór klatek ust preferuje bliską pozę (koszt) i nie wychodzi poza granicę; klatka pętli na czas mowy przewidywana z czasu wideo (trafność ±1 klatka), rysowanie wg dokładnie wyświetlanej klatki (`requestVideoFrameCallback`); pauzy między zdaniami — zamknięte usta z tej samej pozy.
+- Biblioteka: 239 klatek (co 2. klatka pętli), 520 KB.
+- Krótkie m/b/p zawsze domykają usta, „a”/„o” zawsze je otwierają (wcześniej głoska krótsza niż 40 ms mogła wypaść).
+- Test `tests/test_kat_ust.py` (przeglądarka, 110 próbek z 11 miejsc pętli podczas mowy): obrót nakładki względem twarzy śr. 0,28°, p95 0,75°; kąt szpary zamkniętych warg śr. 0,58° (poprzednia wersja: 2,9°, do 7,6°); przesunięcie p95 1,5 px (poprzednio 6,5 px); szew 6,3 (poprzednio 15,7).
+- Pozostałe testy: mowa 10/10 (3× z rzędu), zdarzenia, pierwsze włączenie na telefonie, wolne urządzenie (4× wolniejszy procesor: 52 kl/s, dobór 24 ms/zdanie, zero spóźnień).
+
 ## Plan
 1. Ujęcia obiegu: 05 odczyt, 06 analiza, 08 segregowanie, 12 odłożenie (prompty w `docs/ujecia.md`).
 2. Poprawki logo na ścianie → nowy kadr bazowy (wtedy klipy generujemy już z niego).

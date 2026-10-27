@@ -8,7 +8,11 @@ pozy) woła tylko `mowa.powiedz(...)` i nie musi nic wiedzieć o syntezie ani o 
 - Wbudowanie w stronę: `python3 tools/zbuduj_strone.py ŚCIEŻKA/egzo-recepcja.html --repo index.html`
   (artefakt nie pozwala na osobne skrypty, więc moduł jest wklejany między `/*<mowa>*/` i `/*</mowa>*/`)
 - Dane ust: `python3 -I tools/zbuduj_mowe.py KADR.jpg PĘTLA.mp4 lip/ [KLIP_MÓWIENIA.mp4 …]`
-- Testy: `python3 tests/test_mowa.py` (10 sprawdzeń, serwer testowy na porcie 8768)
+- Testy (serwer testowy na porcie 8768):
+  - `tests/test_mowa.py` — 10 sprawdzeń interfejsu (m/b/p, „a”, pauzy, strumień, zdarzenia, stop)
+  - `tests/test_kat_ust.py` — kąt ust w całej pętli podczas mowy: ta sama klatka z nakładką i bez;
+    obrót nakładki p95 ≤ 1,5°, kąt szpary warg średnio ≤ 1,5°, przesunięcie ≤ 3 px, szew ≤ 8
+  - `tests/test_wolne_urzadzenie.py` — procesor 4× wolniej: bez spóźnień, dobór ≤ 60 ms/zdanie, ≥ 30 kl/s
 
 ## Interfejs
 
@@ -57,9 +61,16 @@ EgzoMowa.mowione('12,5%')   // tekst w postaci do czytania na głos
    wybierany jest ciąg klatek (Viterbi), z preferencją dla klatek, które w nagraniu następowały po sobie —
    dzięki temu ruch jest naturalny. Obraz wyprzedza dźwięk o 40 ms.
 4. **Kąt i położenie.** Dla każdej klatki pętli wideo jest zapisane przekształcenie (obrót, skala,
-   przesunięcie) z kadru bazowego do tej klatki. Klatki biblioteki są wyrównane do kadru bazowego **tą samą
-   metodą** (ECC na okolicy ust i brody), więc po narysowaniu z tym przekształceniem usta mają dokładnie kąt
-   twarzy — nie przekrzywiają się, gdy ona przechyla głowę.
+   przesunięcie) z kadru bazowego do tej klatki. Klatki biblioteki są wyrównane do kadru bazowego tą samą
+   metodą (ECC na okolicy ust i brody).
+5. **Poza głowy.** W pętli głowa przechyla się o ok. 17° i odwraca w bok (kadr startowy) albo patrzy prosto.
+   Płaskie przekształcenie nie odda obrotu w przestrzeni — usta z innej pozy wychodziły krzywe (do 10°).
+   Dlatego każda klatka ma wektor pozy (z wyglądu głowy bez ust), a dobór bierze tylko usta z klatek
+   o pozie zbliżonej do tej, która BĘDZIE na ekranie (klatka pętli przewidywana z czasu wideo, trafność ±1 klatka;
+   rysowanie według dokładnie wyświetlanej klatki — `requestVideoFrameCallback`). Pauzy między zdaniami:
+   zamknięte usta z tej samej pozy. Gdyby wideo się przycięło, klatka z daleka w pozie jest podmieniana.
+6. **Krótkie głoski.** m/b/p krótsze niż krok ust (40 ms) dostają gwarantowany krok z domkniętymi ustami,
+   a „a”/„o” — z otwartymi; te kroki mają większą wagę przy doborze.
 
 ## Dodawanie nowych umiejętności
 
