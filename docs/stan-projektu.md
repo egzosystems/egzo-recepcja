@@ -18,6 +18,13 @@
 - Wejście w klip: paczka wejść (`media/egzo-wejscia_2026-10-27.mp4`, `tools/entry_pack.py`) — przejścia z każdej pełnej sekundy pętli do kadru bazowego. Silnik czeka do najbliższej pełnej sekundy (≤1 s, jak czas reakcji).
 - Test lokalny wymaga serwera z obsługą zakresów bajtów (przewijanie wideo); prosty `python3 -m http.server` jej nie ma.
 
+## Głos i rozmowa (wersja 1)
+- Głos: syntezator przeglądarki (Web Speech API, pl-PL), włączany przyciskiem „Włącz głos” (telefony wymagają gestu).
+- Powitanie zgrane z ruchem ust w klipie (kwestia startuje w 2,1 s).
+- Pozostałe kwestie jak lektor, z napisem w kadrze (na telefonie pod kadrem).
+- Rozmowa: pole „Napisz do niej” → Claude (capability `sample` w artefakcie) z opisem roli i listą dokumentów → odpowiedź czytana na głos.
+- Następny krok: pętla mówienia z Veo (prompt 16 w ujecia.md), potem własny głos (np. ElevenLabs) w wersji lokalnej / Obsidian.
+
 ## Plan
 1. Ujęcia obiegu: 05 odczyt, 06 analiza, 08 segregowanie, 12 odłożenie (prompty w `docs/ujecia.md`).
 2. Poprawki logo na ścianie → nowy kadr bazowy (wtedy klipy generujemy już z niego).

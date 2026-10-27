@@ -84,6 +84,12 @@ She turns her torso toward the computer monitor on screen left, places her left 
 She looks into the lens and offers a suggestion with an open left palm, speaking briefly in Polish with a friendly expression, then returns the hand to the desk.
 ```
 
+### 16 Pętla mówienia (do głosu)
+Bez dźwięku. Usta mają się ruszać jak przy spokojnej rozmowie, ręce zostają na biurku — wtedy pętlę da się odtwarzać pod dowolną kwestię głosu.
+```
+She talks calmly and continuously to the viewer as if explaining something, looking into the lens. Natural lip and jaw movement as in normal speech, small head movements, occasional blinks, a friendly expression. Both hands stay resting on the desk the whole time, no gestures. No sound.
+```
+
 ### 07 Przeglądanie
 ```
 She leafs through the two or three sheets she is holding, flipping each page with the fingers of her left hand, paper bending realistically, eyes following each page.
