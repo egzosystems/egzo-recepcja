@@ -498,8 +498,22 @@ function pytanieTakNie(t){ t=String(t||'').trim(); if(!/\?["”»]?$/.test(t)) r
   return !PYT_SZCZEG.test(g)&&!PYT_SZCZEG.test(ost); }
 // wyższy ton na ostatniej sylabie: przyspieszenie odtwarzania od początku ostatniej sylaby do środka ostatniej
 // samogłoski (czasy głosek z modelu), potem trzymane do końca; zwraca, o ile wcześniej kończy się dźwięk
+// EKSPRESJA (0–2, 1 = dawniej): melodia zdania i zmienność modelu mowy (suwak „Ekspresja” w Studio)
+let EKSPR=1;
+// melodia zdania oznajmującego / wykrzyknienia: start lekko wyżej, akcent w pierwszej trzeciej, opadanie na końcu.
+// Krzywa prędkości odtwarzania ma średnią 1 — długość zdania (i synchronizacja ust) bez zmian.
+function melodia(src,start,T,m){
+  const e=Math.max(0,EKSPR-.6); if(e<=0||T<.6) return 0;
+  const tekst=String(m&&m.text||''), wykrz=/!\s*$/.test(tekst);
+  const p=wykrz?.38:.3, d=wykrz?[.03*e,.085*e,-.045*e]:[.02*e,.05*e,-.035*e];
+  const sr=(d[0]+d[1])/2*p+(d[1]+d[2])/2*(1-p);   // średnia — odejmujemy, żeby długość się nie zmieniła
+  const r=d.map(x=>1+x-sr);
+  src.playbackRate.setValueAtTime(r[0],start); src.playbackRate.linearRampToValueAtTime(r[1],start+p*T); src.playbackRate.linearRampToValueAtTime(r[2],start+T);
+  return 0;
+}
 function intonacja(src,start,T,rise,m,offset){
-  if(!rise||T<.4) return 0;
+  if(!rise) return melodia(src,start,T,m);
+  if(T<.4) return 0;
   const r=GLOS.wznies; let a=T-GLOS.wzniesCzas, b=T-GLOS.wzniesCzas*.4;
   if(m&&m.dur&&m.chars){ const sr=m.sampleRate, hop=m.hop; let t=-(offset||0), v0=-1, v1=-1;
     for(let k=0;k<m.chars.length;k++){ const t1=t+m.dur[k]*hop/sr; if('aąeęioóuy'.includes(m.chars[k])){ v0=t; v1=t1; } t=t1; }
@@ -1176,7 +1190,8 @@ function utworz(opt){
       }
       voice.engine='system'; voice.v=nazwa||null; return Promise.resolve();
     },
-    ustaw(p){ if(p.tempo!=null) voice.rate=p.tempo; if(p.wysokosc!=null) voice.pitch=p.wysokosc; if(p.szum!==undefined) voice.szum=p.szum; if(p.szumDl!==undefined) voice.szumDl=p.szumDl;
+    ustaw(p){ if(p.ekspresja!=null){ EKSPR=Math.max(0,Math.min(2,+p.ekspresja)); voice.szum=.45+.12*(EKSPR-1); voice.szumDl=.6+.25*(EKSPR-1); }
+      if(p.tempo!=null) voice.rate=p.tempo; if(p.wysokosc!=null) voice.pitch=p.wysokosc; if(p.szum!==undefined) voice.szum=p.szum; if(p.szumDl!==undefined) voice.szumDl=p.szumDl;
       if(p.barwa&&BARWY[p.barwa]&&p.barwa!==voice.barwa){ voice.barwa=p.barwa; try{ neural.chainOut&&neural.chainOut.disconnect(); }catch(e){} neural.chain=null; neural.chainOut=null; } },
     barwy:()=>Object.fromEntries(Object.entries(BARWY).map(([k,v])=>[k,v.n])),
     get barwa(){ return voice.barwa; },
