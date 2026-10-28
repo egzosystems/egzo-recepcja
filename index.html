@@ -1,5 +1,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0b0a08">
+<script src="lib/samodzielna.js"></script>
 <title>EGZO Recepcja</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -1996,7 +1998,7 @@ const chatLog=document.getElementById('chatLog'), chatForm=document.getElementBy
 const chatHistory=(store('egzo-rozmowa')||[]).slice(-20);
 let sampleFn=null;
 const sampleReadyP=(async()=>{ try{ return await window.claude?.use?.('sample'); }catch(e){ return null; } })();
-(async()=>{ sampleFn=await sampleReadyP; if(!sampleFn){ document.getElementById('chatHint').textContent='Rozmowa działa po otwarciu strony w Claude.'; chatIn.disabled=true; chatForm.querySelectorAll('button').forEach(x=>x.disabled=true); } })();
+(async()=>{ sampleFn=await sampleReadyP; if(!sampleFn){ document.getElementById('chatHint').textContent=window.EGZO_SAMODZIELNA?'Wklej klucz API powyżej, żeby z nią rozmawiać.':'Rozmowa działa po otwarciu strony w Claude.'; chatIn.disabled=true; chatForm.querySelectorAll('button').forEach(x=>x.disabled=true); } })();
 function addMsg(who,t){const d=document.createElement('div');d.className='msg '+who;d.textContent=t;chatLog.appendChild(d);chatLog.scrollTop=chatLog.scrollHeight;return d;}
 chatHistory.forEach(m=>addMsg(m.role==='user'?'me':'her',m.content));
 
@@ -2024,7 +2026,7 @@ async function histInit(){
       await histSave(withT); msgs=mergeMsgs(msgs,withT); }
     store('egzo-rozmowa-w-bazie',1);
     setHist(mergeMsgs(msgs,chatHistory.filter(m=>m.t)));
-    document.getElementById('chatHint').textContent='Odpowiada na głos, gdy głos jest włączony. Historia zapisuje się na wszystkich Twoich urządzeniach.';
+    document.getElementById('chatHint').textContent=window.EGZO_SAMODZIELNA?(sampleFn?'Odpowiada na głos, gdy głos jest włączony. Historia zostaje na tym urządzeniu.':'Wklej klucz API powyżej, żeby z nią rozmawiać.'):'Odpowiada na głos, gdy głos jest włączony. Historia zapisuje się na wszystkich Twoich urządzeniach.';
     // na żywo: wiadomości napisane na drugim urządzeniu
     hist.unsub=col.doc(dzien()).onSnapshot(s=>{ if(!s.exists||chatBusy) return; const m=mergeMsgs(chatHistory,(s.data()||{}).wiadomosci||[]); if(m.length!==chatHistory.length) setHist(m); },()=>{});
   }catch(e){ console.warn('historia:',e&&e.code); }

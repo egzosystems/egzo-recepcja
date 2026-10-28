@@ -22,5 +22,8 @@ if '--repo' in sys.argv:
     out = pathlib.Path(sys.argv[sys.argv.index('--repo') + 1])
     r = re.sub(r'(?<![/\w])(egzo-[\w.-]+_\d{4}-\d{2}-\d{2}[\w.-]*\.(?:mp4|jpg))', r'media/\1', h)
     r = '<meta charset="utf-8">\n<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">\n' + r
+    # wersja samodzielna (telefon/tablet poza Claude): podstawia window.claude, gdy strona nie jest w ramce Claude
+    r = r.replace('<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">\n',
+                  '<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">\n<meta name="theme-color" content="#0b0a08">\n<script src="lib/samodzielna.js"></script>\n', 1)
     out.write_text(r)
     print('wersja repo →', out)

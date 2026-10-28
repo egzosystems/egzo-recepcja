@@ -1,0 +1,16 @@
+{
+  "name": "EGZO Recepcja",
+  "short_name": "Egzo",
+  "description": "Asystentka EGZO SYSTEMS — rozmowa głosem, „Hej, Egzo”.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0b0a08",
+  "theme_color": "#0b0a08",
+  "lang": "pl",
+  "icons": [
+    {"src": "media/ikona-192.png", "sizes": "192x192", "type": "image/png"},
+    {"src": "media/ikona-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable"}
+  ]
+}
