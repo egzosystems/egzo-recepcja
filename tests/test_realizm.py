@@ -11,6 +11,9 @@ Miary:
          (sam cel ma ~20% energii > 8 Hz — szybkie domknięcia przy 6 sylabach/s są naturalne).
   RYTM   cykle otwórz–zamknij w rysowanych ustach wobec cykli w celu (1 = każda sylaba widoczna).
   MIGOTANIE zmiana skóry wokół ust między kolejnymi klatkami ponad zmianę w samym wideo (przeskoki tekstury).
+         Próg z pomiaru prawdziwej mowy: klip, w którym ta sama twarz naprawdę mówi (Higgsfield, 24 kl./s), ma
+         średnio 2,46, p95 6,91 — policzki i broda ruszają się z ustami. Limit (śr. ≤ 1,3, p95 ≤ 6) jest poniżej
+         naturalnej mowy; dawny limit 0,8 / 3 pasował do biblioteki z prawie nieruchomymi ustami.
   SKOKI  przejścia między niesąsiednimi klatkami nagrania na sekundę (informacyjnie: pomiary pokazały, że
          same skoki nie zwiększają migotania — liczy się MIGOTANIE).
   SAMOGŁOSKI średnie otwarcie na a/o/e wobec spółgłosek m/b/p.
@@ -132,7 +135,7 @@ if __name__ == '__main__':
     agg = {k: round(float(np.mean([r[k] for r in res if r[k] is not None])), 3) for k in res[0] if k != 'poz'}
     agg['samogłoski_otwarcie'] = round(vm['v'], 2); agg['mbp_otwarcie'] = round(vm['c'], 2)
     print('ŚREDNIO:', agg)
-    ok = (agg['ostrosc'] >= 0.6 and -100 <= agg['sync_ms'] <= 20 and agg['drgania'] <= 0.12 and agg['migotanie'] <= 0.8 and agg['migotanie_p95'] <= 3
+    ok = (agg['ostrosc'] >= 0.6 and -100 <= agg['sync_ms'] <= 20 and agg['drgania'] <= 0.12 and agg['migotanie'] <= 1.3 and agg['migotanie_p95'] <= 6
           and agg['samogłoski_otwarcie'] >= 0.6 and agg['mbp_otwarcie'] <= 0.15 and 0.75 <= agg['rytm_wzgl_celu'] <= 1.2 and not errs)
     print('BŁĘDY STRONY:', errs); print('WYNIK:', 'OK' if ok else 'NIE ZALICZONY')
     sys.exit(0 if ok else 1)
