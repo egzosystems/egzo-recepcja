@@ -44,14 +44,15 @@ function ordForm(w,c){
   if(c==='fg') return stem+(soft?'iej':'ej');
   if(c==='fi') return stem+(soft?'ią':'ą');
   if(c==='l') return stem+(soft?'im':'ym');
+  if(c==='n') return stem+(soft?'ie':'e');
   return w;
 }
 function under1000(x,g){ const J=g?G_J:N_J, D=g?G_D:N_D, S=g?G_S:N_S, r=[];
   if(x>=100){ r.push(S[Math.floor(x/100)]); x%=100; }
-  if(x>=20){ r.push(D[Math.floor(x/10)]); x%=10; if(x) r.push(J[x]); } else if(x||!r.length) r.push(J[x]);
+  if(x>=20){ r.push(D[Math.floor(x/10)]); x%=10; if(x) r.push(g&&x===1?'jeden':J[x]); } else if(x||!r.length) r.push(g&&x===1&&r.length?'jeden':J[x]);
   return r.join(' '); }
 // rzeczowniki żeńskie (po liczbie: jedna, dwie): tematy słów
-const ZENSKIE=/^(osob|sztuk|godzin|minut|sekund|faktur|wiadomoś|ofert|paczk|płyt|stron|rzecz|spraw|notatk|umow|firm|ton[ay]?$|dob[ay]$|wersj|częś|kopi|rozmow|szafk|półk|szuflad|desk|listw|zmian|poprawk|uwag|prośb|opcj|propozycj|wycen|dostaw|przesyłk|wizyt|rat[ay]?$|kwot|pozycj|noc|kobiet|pani|klientk|sesj|lekcj|reklamacj|wpłat|płatnoś|transakcj|kategori|zakładk|kart|lini|tras|drog|książk|figurk|butelk|puszk|lamp|kamer|drukark|maszyn|frezark|pił|wiertark|krawędz|tablic|płytk|ściank|wnęk|szyb|ścian|klatk|skrzyn|kostk|część|tygodniówk|zaliczk|faktur|fotografi|dziewczyn|córk|siostr)/i;
+const ZENSKIE=/^(osob|sztuk|godzin|minut|sekund|faktur|wiadomoś|ofert|paczk|płyt|stron|rzecz|spraw|notatk|umow|firm|ton[ay]?$|dob[ay]$|wersj|częś|kopi|rozmow|szafk|półk|szuflad|desk|listw|zmian|poprawk|uwag|prośb|opcj|propozycj|wycen|dostaw|przesyłk|wizyt|rat[ay]?$|kwot|pozycj|noc|kobiet|pani|klientk|sesj|lekcj|reklamacj|wpłat|płatnoś|transakcj|kategori|zakładk|kart|lini|tras|drog|książk|figurk|butelk|puszk|lamp|kamer|drukark|maszyn|frezark|pił|wiertark|krawędz|tablic|płytk|ściank|wnęk|szyb|ścian|klatk|skrzyn|kostk|część|tygodniówk|zaliczk|faktur|fotografi|dziewczyn|córk|siostr|połow|godzin|ćwiartk)/i;
 const zenska=w=>ZENSKIE.test(w||'');
 // liczba w rodzaju żeńskim: …jeden → jedna (tylko samo 1), …dwa → dwie (poza 12)
 function numZ(n,txt){ if(n===1) return 'jedna'; if(n%10===2&&n%100!==12) return txt.replace(/dwa$/,'dwie'); return txt; }
@@ -101,18 +102,20 @@ const JEDN={
   'w':['wat','waty','watów','wata'],'kw':['kilowat','kilowaty','kilowatów','kilowata'],'kwh':['kilowatogodzina','kilowatogodziny','kilowatogodzin','kilowatogodziny'],
   'mb':['megabajt','megabajty','megabajtów','megabajta'],'gb':['gigabajt','gigabajty','gigabajtów','gigabajta'],'kb':['kilobajt','kilobajty','kilobajtów','kilobajta'],
   'km/h':['kilometr na godzinę','kilometry na godzinę','kilometrów na godzinę','kilometra na godzinę'],
-  'r.':['rok','lata','lat','roku'],'%':['procent','procent','procent','procent']
+  'r.':['rok','lata','lat','roku'],'%':['procent','procent','procent','procent'],
+  'v':['wolt','wolty','woltów','wolta'],'hz':['herc','herce','herców','herca'],'khz':['kiloherc','kiloherce','kiloherców','kiloherca'],
+  'mah':['miliamperogodzina','miliamperogodziny','miliamperogodzin','miliamperogodziny']
 };
 // dopełniacz l.mn. jednostki (po liczebniku w dopełniaczu: do pięciu złotych, od dwóch metrów)
-const JEDN_GPL={'złoty':'złotych','grosz':'groszy','euro':'euro','dolar':'dolarów','sztuka':'sztuk','godzina':'godzin','minuta':'minut','sekunda':'sekund','tona':'ton','procent':'procent','rok':'lat','kilowatogodzina':'kilowatogodzin'};
+const JEDN_GPL={'złoty':'złotych','grosz':'groszy','euro':'euro','dolar':'dolarów','sztuka':'sztuk','godzina':'godzin','minuta':'minut','sekunda':'sekund','tona':'ton','procent':'procent','rok':'lat','kilowatogodzina':'kilowatogodzin','miliamperogodzina':'miliamperogodzin'};
 const unitGenPl=f=>JEDN_GPL[f[0]]||f[2];
-const JEDN_Z=new Set(['sztuka','godzina','minuta','sekunda','tona','kilowatogodzina']);
+const JEDN_Z=new Set(['sztuka','godzina','minuta','sekunda','tona','kilowatogodzina','miliamperogodzina']);
 // skróty (z kropką lub bez) → słowa
 const SKROTY=[
   [/\bnp\./gi,'na przykład'],[/\bm\.\s?in\./gi,'między innymi'],[/\bitd\./gi,'i tak dalej'],[/\bitp\./gi,'i tym podobne'],
   [/\btj\./gi,'to jest'],[/\btzn\./gi,'to znaczy'],[/\btzw\./gi,'tak zwany'],[/\bwg\b\.?/gi,'według'],[/\bws\./gi,'w sprawie'],
   [/\bdot\./gi,'dotyczy'],[/\bzob\./gi,'zobacz'],[/\bpw\./gi,'pod wezwaniem'],[/\bul\./gi,'ulica'],[/\bal\./gi,'aleja'],[/\bpl\.(?=\s+[A-ZĄĆĘŁŃÓŚŹŻ])/g,'plac'],
-  [/\bos\.(?=\s+[A-ZĄĆĘŁŃÓŚŹŻ])/g,'osiedle'],[/\btel\./gi,'telefon'],[/\btel\b/gi,'telefon'],[/\bkom\./gi,'komórka'],[/\bnr\b\.?/gi,'numer'],
+  [/\bos\.(?=\s+[A-ZĄĆĘŁŃÓŚŹŻ])/g,'osiedle'],[/\btel\./gi,'telefon'],[/\btel\b/gi,'telefon'],[/\bkom\.(?=\s*[\d+(:])/gi,'komórka'],[/\bnr\b\.?/gi,'numer'],
   [/(?<!\d\s?)\bgodz\.(?!\s*\d)/gi,'godzina'],[/(?<!\d\s?)\bmin\./gi,'minimum'],[/\bmaks\.|\bmax\./gi,'maksymalnie'],[/\bpn\.(?=\s|$)/g,'poniedziałek'],[/\bwt\.(?=\s|$)/g,'wtorek'],
   [/\bśr\.(?=\s|$)/g,'środa'],[/\bczw\.(?=\s|$)/g,'czwartek'],[/\bpt\.(?=\s|$)/g,'piątek'],[/\bsob\.(?=\s|$)/g,'sobota'],[/\bndz\.|\bnd\.(?=\s|$)/g,'niedziela'],
   [/\bsp\.\s?z\s?o\.\s?o\./gi,'spółka z o o'],[/\bs\.\s?c\./gi,'spółka cywilna'],[/\bS\.A\./g,'es a'],[/\bp\.\s?s\./gi,'post scriptum'],
@@ -132,7 +135,7 @@ const OBCE={
   'whatsapp':'łotsap','whatsappie':'łotsapie','messenger':'mesendżer','messengerze':'mesendżerze',
   'iphone':'ajfon','iphone\'a':'ajfona','windows':'łindołs','windowsie':'łindołsie','mac':'mek','macbook':'mekbuk',
   'online':'onlajn','offline':'oflajn','newsletter':'niusleter','feedback':'fidbek','deadline':'dedlajn','deadline\'u':'dedlajnu',
-  'ok':'okej','okay':'okej','okey':'okej','sorry':'sori','weekend':'łikend','weekendu':'łikendu','weekendzie':'łikendzie',
+  'ok':'okej','okay':'okej','okey':'okej','sorry':'sori','weekend':'łikend','weekendu':'łikendu','weekendzie':'łikendzie','weekendem':'łikendem','weekendy':'łikendy','weekendów':'łikendów','weekendach':'łikendach','weekendowy':'łikendowy',
   'zoom':'zum','zoomie':'zumie','teams':'tims','teamsach':'timsach','slack':'slak','dropbox':'dropboks','onedrive':'łandrajw','drive':'drajw',
   'claude':'klod','claude\'a':'kloda','chatgpt':'czat dżi pi ti',
   'notion':'nołszyn','canva':'kanwa','wifi':'łifi','wi-fi':'łifi','bluetooth':'blutuf',
@@ -158,16 +161,25 @@ const KONTEKST_TEL=/(tel\.?|telefon\w*|numer\w*|nr|kom\.?|komórk\w*|zadzwoń|dz
 const cyfry=x=>x.split('').map(c=>N_J[+c]).join(' ');
 const grupaTel=x=>x[0]==='0'?cyfry(x):numPL(+x);
 // ułamek dziesiętny: 1,5 → półtora; 2,5 → dwa i pół; inaczej „przecinek”
-function ulamek(a,fr,gen){ const n=+a;
-  if(fr==='5'){ if(n===0) return 'pół'; if(n===1) return 'półtora'; return (gen?numPL(n,true):numPL(n))+' i pół'; }
+function ulamek(a,fr,gen,fem){ const n=+a;
+  if(fr==='5'){ if(n===0) return 'pół'; if(n===1) return fem?'półtorej':'półtora'; return (gen?numPL(n,true):(fem?numZ(n,numPL(n)):numPL(n)))+' i pół'; }
   return (gen?numPL(n,true):numPL(n))+' przecinek '+(fr[0]==='0'?cyfry(fr):numPL(+fr)); }
+// narzędnik (z dwoma klientami, przed pięcioma minutami) — do 99
+function numNarz(n,fem){ const J1={1:'jednym',2:fem?'dwiema':'dwoma',3:'trzema',4:'czterema'};
+  const u=x=>J1[x]||G_J[x].replace(/u$/,'oma');
+  if(n<20) return u(n); const d=G_D[Math.floor(n/10)].replace(/u$/,'oma'), j=n%10; return j?d+' '+u(j):d; }
+const GEN_PL=/^(dni|tygodni|miesięcy|lat|osób|sztuk|godzin|minut|sekund|złotych|groszy|procent|stopni|razy|zamówień|zadań|maili|mejli|e-maili|dokumentów|klientów|tysięcy|milionów|metrów|centymetrów|kilogramów)$|(ów|ych|ich|eń|ań)$/i;
+// liczba 1 przed słowem: jeden / jedna / jedną / jedno (rzeczownik lub przymiotnik obok)
+function jeden(word,fem){ if(!word) return 'jeden';
+  if(/(?:mię|zwierzę|cielę|źrebię)$/.test(word)) return 'jedno'; if(/[ęą]$/.test(word)&&!/się$/.test(word)) return 'jedną';
+  if(fem||/a$/.test(word)) return 'jedna'; if(/(?:e|o|um)$/.test(word)) return 'jedno'; return 'jeden'; }
 function spokenPL(t){
   if(!t) return '';
   let s=String(t);
   const pre=(str,off)=>str.slice(Math.max(0,off-40),off);
   // 1) wygląd tekstu: Markdown, linki, emotikony, punktory
   s=s.replace(/```[\s\S]*?```/g,' ').replace(/`([^`]*)`/g,'$1').replace(/!\[[^\]]*\]\([^)]*\)/g,' ')
-     .replace(/\[([^\]]+)\]\((?:[^)]*)\)/g,'$1').replace(/^\s{0,3}#{1,6}\s*/gm,'').replace(/^\s*[-*•·▪►]\s+/gm,'').replace(/^\s*(\d+)[.)]\s+(?=\D)/gm,'')
+     .replace(/\[([^\]]+)\]\((?:[^)]*)\)/g,'$1').replace(/^\s{0,3}#{1,6}\s*/gm,'').replace(/^\s*[-*•·▪►]\s+/gm,'').replace(/^\s*(\d+)[.)]\s+(?=[A-ZĄĆĘŁŃÓŚŹŻ*_\[„"])/gm,'')
      .replace(/\*\*([^*]+)\*\*|__([^_]+)__/g,(m,a,b)=>a||b).replace(/(^|\s)[*_]([^*_\n]+)[*_](?=[\s.,!?;:]|$)/g,'$1$2')
      .replace(/[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}\u{200D}\u{2B50}\u{2705}]/gu,'')
      .replace(/([^.!?:;,\s])\s*\r?\n+\s*/g,'$1. ').replace(/\r?\n+/g,' ');
@@ -176,11 +188,18 @@ function spokenPL(t){
   s=s.replace(/([\w.+-]+)@([\w-]+(?:\.[\w-]+)+)/g,(m,u,d)=>u.replace(/[._-]/g,c=>({'.':' kropka ','_':' podkreślnik ','-':' myślnik '}[c]))+' małpa '+dom(d))
      .replace(/https?:\/\/(?:www\.)?([\w-]+(?:\.[\w-]+)+)(?:\/[^\s,;)]*)?/gi,(m,d)=>dom(d))
      .replace(/(?<![\w@])www\.([\w-]+(?:\.[\w-]+)+)(?:\/[^\s,;)]*)?/gi,(m,d)=>dom(d))
+     .replace(/(?<![\w@.\/-])([a-z0-9][\w-]*(?:\.[\w-]+)*\.(?:pl|com|eu|net|org|io|de|uk|info|shop|store))(?![\w-]|\.[a-z])(?:\/[^\s,;)]*)?/gi,(m,d)=>dom(d))
      .replace(/([\wąćęłńóśźżĄĆĘŁŃÓŚŹŻ-]+)\.(pdf|docx?|xlsx?|pptx?|jpe?g|png|zip|csv|txt|md|mp4|mp3|wav|html?)(?![\w])/gi,(m,f,e)=>f+' kropka '+({pdf:'pe de ef',doc:'dok',docx:'doks',xls:'iks el es',xlsx:'iks el es iks',ppt:'pe pe te',pptx:'pe pe te iks',jpg:'jot peg',jpeg:'jot peg',png:'pe en gie',zip:'zip',csv:'ce es fał',txt:'te iks te',md:'em de',mp4:'em pe cztery',mp3:'em pe trzy',wav:'ław',html:'ha te em el',htm:'ha te em el'}[e.toLowerCase()]));
   // 3) skróty
   for(const [re,w] of SKROTY) s=s.replace(re,w);
   // 4) wymiary i ułamki zwykłe: 120x60x50 → 120 na 60 na 50; 2026/11/15 → łamane przez
   s=s.replace(/(\d)\s*[x×]\s*(?=\d)/g,'$1 na ').replace(/(\d)\s*\/\s*(?=\d)/g,'$1 łamane przez ');
+  // 4b) kody i liczby z separatorami
+  s=s.replace(/(?<![\d-])(\d{2})-(\d{3})(?=\s+[A-ZĄĆĘŁŃÓŚŹŻ])/g,(m,a,b)=>`${grupaTel(a)}, ${grupaTel(b)}`)   // 00-950 Warszawa
+   .replace(/(?<![\d,.-])\d{2,4}(?:-\d{2,4}){3,}(?![\d-])/g,m=>m.split('-').map(grupaTel).join(', '))   // NIP 123-456-78-90
+   .replace(/(?<![\d,.])(\d{1,3})((?:\.\d{3})+)(?=(?:,\d{1,2})?\s*(?:zł|PLN|€|EUR|USD|\$|złot|tys))/g,(m,a,b)=>a+b.replace(/\./g,''))   // 1.200 zł
+   .replace(/(?<![\d,.])(\d+)\s*[x×](?![\d${L_}])/g,(m,n)=>`${n} ${+n===1?'raz':'razy'}`)   // 2x → dwa razy
+   .replace(new RegExp(`(?<![${L_}\\d])([A-Z])(\\d{1,3})(?![\\d${L_}])`,'g'),(m,l,n)=>literuj(l)+' '+n);   // Q4, A4
   // 5) telefony
   s=s.replace(/(\+\s?\d{2})[\s-]?(\d{3})[\s-]?(\d{3})[\s-]?(\d{3})(?![\d]|[,.]\d)/g,(m,p,a,b,c)=>` plus ${numPL(+p.replace(/\D/g,''))}, ${grupaTel(a)}, ${grupaTel(b)}, ${grupaTel(c)}`)
      .replace(/(\+\s?\d{2})[\s-]?\(?(\d{2})\)?[\s-]?(\d{3})[\s-]?(\d{2})[\s-]?(\d{2})(?![\d]|[,.]\d)/g,(m,p,a,b,c,d)=>` plus ${numPL(+p.replace(/\D/g,''))}, ${[a,b,c,d].map(grupaTel).join(', ')}`)
@@ -191,14 +210,22 @@ function spokenPL(t){
   // 6) separatory tysięcy (1 250 000, 1 250,50)
   s=s.replace(/(?<![\d,.])(\d{1,3})((?:[   ]\d{3})+)(?![\d])/g,(m,a,b)=>a+b.replace(/[   ]/g,''));
   // 7) daty i lata
-  const przyp=(p)=>/(?:^|\s)(jest|to|był|była|będzie|wypada|przypada)\s*$/i.test(p)?'m':'g';
+  const przyp=(p)=>{ if(/(?:^|\s)(jest|to|był|była|będzie|wypada|przypada)\s*$/i.test(p)) return 'm';
+    const w=/(?:^|\s)(?:(\S+)\s+)?(poniedziałek|wtorek|środa|czwartek|piątek|sobota|niedziela),?\s*$/i.exec(p);   // „Dziś środa, 28 października” — mianownik; „w środę…” nie pasuje
+    return w&&!/^(w|we|od|do|na|przed|po|za)$/i.test(w[1]||'')?'m':'g'; };
   const data=(D,M,Y,p,rokSlowo)=>ordPL(D,przyp(p))+' '+MIES[M-1]+(Y?' '+ordPL(Y,'g')+' roku':'');
+  // zakresy dat: 28.10–30.10, 3–5 listopada
+  s=s.replace(/(?<![\d,.])(\d{1,2})\.(\d{1,2})(?:\.(\d{4}))?\s*[-–—]\s*(\d{1,2})\.(\d{1,2})(?:\.(\d{4}))?(?![\d])(?:\s*(?:r\.|roku))?/g,(m,d1,m1,y1,d2,m2,y2,off,str)=>{
+    if(+m1<1||+m1>12||+m2<1||+m2>12||+d1<1||+d1>31||+d2<1||+d2>31) return m; const Y=y2||y1;
+    return (/od\s*$/i.test(pre(str,off))?'':'od ')+ordPL(+d1,'g')+(m1===m2&&!y1?'':' '+MIES[m1-1])+' do '+ordPL(+d2,'g')+' '+MIES[m2-1]+(Y?' '+ordPL(+Y,'g')+' roku':''); });
+  s=s.replace(new RegExp(`${W0}(\\d{1,2})\\s*[-–—]\\s*(\\d{1,2})\\.?\\s+(stycznia|lutego|marca|kwietnia|maja|czerwca|lipca|sierpnia|września|października|listopada|grudnia)`,'gi'),(m,a,b,mi,off,str)=>
+    +a>=1&&+b<=31&&+a<+b?(/od\s*$/i.test(pre(str,off))?'':'od ')+ordPL(+a,'g')+' do '+ordPL(+b,'g')+' '+mi.toLowerCase():m);
   s=s.replace(/(?<!\d)(\d{4})-(\d{2})-(\d{2})(?!\d)/g,(m,y,mo,d,off,str)=>{ const M=+mo,D=+d; if(M<1||M>12||D<1||D>31) return m; return data(D,M,+y,pre(str,off)); });
   s=s.replace(/(?<![\d,.])(\d{1,2})\.(\d{1,2})\.(\d{4}|\d{2})(?:\s*(?:r\.|roku)(?=[\s,.;:!?)]|$))?(?![\d])/g,(m,d,mo,y,off,str)=>{
     const D=+d, M=+mo; if(D<1||D>31||M<1||M>12) return m; return data(D,M,y.length===2?2000+(+y):+y,pre(str,off)); });
   s=s.replace(/(?<![\d,.])(\d{1,2})\.(\d{1,2})(?=[\s,;:!?)]|\.(?:\s|$)|$)/g,(m,d,mo,off,str)=>{
     const D=+d, M=+mo; if(D<1||D>31||M<1||M>12) return m; return data(D,M,0,pre(str,off)); });
-  s=s.replace(new RegExp(`${W0}(\\d{1,2})\\s+(stycznia|lutego|marca|kwietnia|maja|czerwca|lipca|sierpnia|września|października|listopada|grudnia)(?:\\s+(\\d{4})(?:\\s*(?:r\\.|roku)${W1})?)?`,'gi'),(m,d,mi,y,off,str)=>{
+  s=s.replace(new RegExp(`${W0}(\\d{1,2})\\.?\\s+(stycznia|lutego|marca|kwietnia|maja|czerwca|lipca|sierpnia|września|października|listopada|grudnia)(?:\\s+(\\d{4})(?:\\s*(?:r\\.|roku)${W1})?)?`,'gi'),(m,d,mi,y,off,str)=>{
     const D=+d; if(D<1||D>31) return m; return ordPL(D,przyp(pre(str,off)))+' '+mi.toLowerCase()+(y?' '+ordPL(+y,'g')+' roku':''); });
   // lata: „w 2025 r.” → w … dwudziestym piątym roku; „od 2025 r.” → od … dwudziestego piątego roku; „rok 2026” → rok … dwudziesty szósty
   s=s.replace(new RegExp(`${W0}(w|we|po|z|ze|od|do|sprzed|przed|około)\\s+((?:19|20)\\d\\d)(?:\\s*(r\\.|roku|rokiem))?${W1}`,'gi'),(m,p,y,r)=>{
@@ -207,55 +234,74 @@ function spokenPL(t){
     return p+' '+ordPL(+y,c)+' '+(/^przed$/i.test(p)?'rokiem':(c==='l'?'roku':'roku')); });
   s=s.replace(new RegExp(`${W0}(rok|roku|rocznik|rocznika)\\s+((?:19|20)\\d\\d)${W1}`,'gi'),(m,r,y)=>r+' '+ordPL(+y,/^roku$|^rocznika$/i.test(r)?'g':'m'));
   s=s.replace(/(?<![\d,.])((?:19|20)\d\d)\s*r\.(?=[\s,;:!?)]|$)/g,(m,y)=>ordPL(+y,'m')+' rok');
+  s=s.replace(new RegExp(`(?<![\\d,.])((?:19|20)\\d\\d)\\s+(rok|roku|rokiem)${W1}`,'g'),(m,y,r)=>ordPL(+y,r==='rok'?'m':r==='roku'?'g':'l')+' '+r);
   // 8) godziny
   const godz=(h,mi,p)=>{ const H=+h, M=+mi; if(H>24||M>59) return null;
-    const c=PRZ_NARZ.test(p)?'fi':(PRZ_GEN.test(p)||PRZ_MIEJSC.test(p))?'fg':'f';
+    const c=PRZ_NARZ.test(p)||/(?:^|[\s(,])na\s*$/i.test(p)?'fi':(PRZ_GEN.test(p)||PRZ_MIEJSC.test(p))?'fg':'f';
     const hw=H===0?'zero':ordPL(H,c);
     return hw+(M?' '+(M<10?'zero '+N_J[M]:numPL(M)):''); };
+  s=s.replace(new RegExp(`${W0}(o|godz\\.|w\\s+godz\\.|w\\s+godzinach|godzinach)\\s+(\\d{1,2})[:.](\\d{2})\\s*[-–—]\\s*(\\d{1,2})[:.](\\d{2})(?![\\d])`,'gi'),(m,p,h,mi,h2,mi2)=>{
+    const a=godz(h,mi,' od '), b=godz(h2,mi2,' do '); if(!a||!b) return m; return (/godzinach|w\s+godz/i.test(p)?'w godzinach ':'')+'od '+a+' do '+b; });
   s=s.replace(/(?<![\d,.])(\d{1,2}):(\d{2})(?:\s*[-–—]\s*(\d{1,2}):(\d{2}))?(?![\d])/g,(m,h,mi,h2,mi2,off,str)=>{
     let p=pre(str,off); if(/między\s+\S+(?:\s+\S+)?\s+a\s*$/i.test(p)) p=' między ';
     const a=godz(h,mi,p); if(!a) return m; if(h2==null) return a;
     const b=godz(h2,mi2,' do '); if(!b) return a; return PRZ_GEN.test(p)||/od\s*$/i.test(p)?a+' do '+b:'od '+godz(h,mi,' od ')+' do '+b; });
   s=s.replace(new RegExp(`${W0}(godzina|godzinie|godziny|godz\\.|o|od|do)\\s+(\\d{1,2})\\.(\\d{2})(?![\\d])`,'gi'),(m,p,h,mi)=>{ const a=godz(h,mi,' '+p.replace('godz.','o')+' '); return a?p.replace(/godz\./i,'o')+' '+a:m; });
   s=s.replace(new RegExp(`${W0}(w\\s+godzinach|w\\s+godz\\.?|godzinach|godz\\.?|godziny)\\s+(\\d{1,2})\\s*[-–—]\\s*(\\d{1,2})(?![\\d])`,'gi'),(m,p,a,b)=>+a<=24&&+b<=24?(/^w/i.test(p)?'w godzinach ':'')+'od '+ordPL(+a,'fg')+' do '+ordPL(+b,'fg'):m);
-  s=s.replace(new RegExp(`${W0}(o|około|przed|po|od|do)\\s+(?:godz(?:inie|\\.)\\s*|godziny\\s+)(\\d{1,2})(?![\\d.,:])`,'gi'),(m,p,h)=>+h<=24?p+' '+ordPL(+h,/^przed$/i.test(p)?'fi':'fg'):m);
-  s=s.replace(new RegExp(`${W0}godz\\.\\s*(\\d{1,2})(?![\\d.,:])`,'gi'),(m,h)=>+h<=24?'godzina '+ordPL(+h,'f'):m);
+  s=s.replace(new RegExp(`${W0}(o|około|przed|po|od|do)\\s+(?:godz(?:inie|\\.)\\s*|godziny\\s+)(\\d{1,2})(?![\\d]|[.,:]\\d)`,'gi'),(m,p,h)=>+h<=24?p+' '+ordPL(+h,/^przed$/i.test(p)?'fi':'fg'):m);
+  s=s.replace(new RegExp(`${W0}godz\\.\\s*(\\d{1,2})(?![\\d]|[.,:]\\d)`,'gi'),(m,h)=>+h<=24?'godzina '+ordPL(+h,'f'):m);
   s=s.replace(new RegExp(`${W0}(o)\\s+(\\d{1,2})(?=\\s*(?:$|[.;!?]|,(?!\\d)|\\s+(?:rano|wieczorem|po południu|w nocy|jutro|dzisiaj|dziś)))`,'gi'),(m,p,h)=>+h<=24?p+' '+ordPL(+h,'fg'):m);
   // 9) kwoty i jednostki
   s=s.replace(/(\$|€)\s?(\d+(?:[.,]\d+)?)/g,(m,u,n)=>n+' '+u);
-  const UNIT=`(zł|PLN|gr|€|EUR|\\$|USD|mm|cm2|cm|m2|m²|m3|m³|km\\/h|km|kg|kWh|kW|ml|szt\\.?|godz\\.?|min\\.?|mies\\.?|tys\\.?|mln|mld|°C|°|MB|GB|kB|%|h|m|g|l|t|s)`;
-  s=s.replace(new RegExp(`(?<![\\d,.])(\\d+)(?:,(\\d+))?\\s?${UNIT}(?![${L_}\\d²³])(?:\\s+(tys\\.?|mln|mld)(?![${L_}]))?(?:\\s*(zł|PLN|€|EUR)(?![${L_}]))?`,'g'),(m,a,fr,u,mult,cur,off,str)=>{
+  const UNIT=`(zł|PLN|gr|€|EUR|\\$|USD|mm|cm2|cm|m2|m²|m3|m³|km\\/h|km|kg|kWh|kW|kHz|Hz|mAh|ml|szt\\.?|godz\\.?|min\\.?|mies\\.?|tys\\.?|mln|mld|°C|°|MB|GB|kB|%|h|m|g|l|t|s|W|V)`;
+  s=s.replace(new RegExp(`(?<![\\d,.])(?:(\\d+)\\s*[-–—]\\s*)?(\\d+)(?:,(\\d+))?\\s?${UNIT}(?![${L_}\\d²³])(?:\\s+(tys\\.?|mln|mld)(?![${L_}]))?(?:\\s*(zł|PLN|€|EUR)(?![${L_}]))?`,'g'),(m,od,a,fr,u,mult,cur,off,str)=>{
     let key=u.toLowerCase(); if(/^(szt|godz|min|mies|tys)$/.test(key)) key+='.';
     const f=JEDN[key]; if(!f) return m;
-    const p=pre(str,off), gen=PRZ_GEN.test(p), n=+a;
+    const p=pre(str,off), n=+a;
+    if(od!=null&&+od<n&&!fr&&!mult){   // 24–28°C → od dwudziestu czterech do dwudziestu ośmiu stopni Celsjusza
+      const curF=cur?JEDN[cur.toLowerCase()]||JEDN['zł']:null, fz=JEDN_Z.has(f[0]);
+      return (/od\s*$/i.test(p)?'':'od ')+(fz&&+od===1?'jednej':numPL(+od,true))+' do '+(fz&&n===1?'jednej':numPL(n,true))+' '+(/^(tys\.|mln|mld)$/.test(key)?unitGenPl(f)+(curF?' '+unitGenPl(curF):''):unitGenPl(f)); }
+    const pre2=od!=null?numPL(+od)+', ':'';
+    const gen=PRZ_GEN.test(p);
     const zen=JEDN_Z.has(f[0]);
     const liczba=(x,fem)=>{ const t=gen?numPL(x,true):numPL(x); return fem&&!gen?numZ(x,t):(fem&&gen&&x===1?'jednej':t); };
     const forma=(x,F)=>gen?(x===1?F[3]:unitGenPl(F)):formaPo(x,F);
     // 12,50 zł → dwanaście złotych pięćdziesiąt groszy
     if((key==='zł'||key==='pln')&&fr&&fr.length===2&&!mult){ const zl=JEDN['zł'], gr=JEDN.gr, g=+fr;
-      return liczba(n)+' '+forma(n,zl)+(g?' '+liczba(g)+' '+forma(g,gr):''); }
+      return pre2+liczba(n)+' '+forma(n,zl)+(g?' '+liczba(g)+' '+forma(g,gr):''); }
     const curF=cur?JEDN[cur.toLowerCase()]||JEDN['zł']:null;
     if(/^(tys\.|mln|mld)$/.test(key)){   // 15 tys. zł → piętnaście tysięcy złotych
       const head=fr?ulamek(a,fr,gen)+' '+f[3]:liczba(n)+' '+forma(n,f);
-      return head+(curF?' '+(gen?unitGenPl(curF):curF[2]):''); }
+      return pre2+head+(curF?' '+(gen?unitGenPl(curF):curF[2]):''); }
     if(mult){ const mf=JEDN[mult.toLowerCase().replace(/\.?$/,'.')]||JEDN[mult.toLowerCase()];
       const head=fr?ulamek(a,fr,gen)+' '+mf[3]:liczba(n)+' '+forma(n,mf);
-      return head+' '+(gen?unitGenPl(f):f[2])+(curF?' '+(gen?unitGenPl(curF):curF[2]):''); }
-    if(fr) return ulamek(a,fr,gen)+' '+f[3];
-    return liczba(n,zen)+' '+forma(n,f); });
+      return pre2+head+' '+(gen?unitGenPl(f):f[2])+(curF?' '+(gen?unitGenPl(curF):curF[2]):''); }
+    if(fr) return pre2+ulamek(a,fr,gen,zen)+' '+f[3];
+    return pre2+liczba(n,zen)+' '+forma(n,f); });
   s=s.replace(new RegExp(`${W0}(zł|PLN)${W1}`,'g'),'złotych');
   // 10) pozostałe ułamki i liczby (z odmianą po przyimku i rodzajem żeńskim rzeczownika obok)
-  s=s.replace(/(?<![\d])(\d+),(\d+)(?![\d])/g,(m,a,b,off,str)=>ulamek(a,b,PRZ_GEN.test(pre(str,off))));
+  s=s.replace(new RegExp(`(?<![\\d])(\\d+),(\\d+)(?![\\d])(?=(?:\\s+([${L_}]+))?)`,'g'),(m,a,b,w,off,str)=>ulamek(a,b,PRZ_GEN.test(pre(str,off)),zenska(w)));
   s=s.replace(/(?<![\d])(\d+)\.(\d+)(?![\d])/g,(m,a,b)=>numPL(+a)+' kropka '+numPL(+b));
+  s=s.replace(new RegExp(`(?<![\\d,.])(\\d{1,2})\\.\\s+(?=([a-ząćęłńóśźż]+))`,'g'),(m,n,w,off,str)=>{ const fz=zenska(w)||/a$/.test(w);
+    const c=/(?:^|[\s(,])(w|we|o|po|przy)\s*$/i.test(pre(str,off))?(fz?'fg':'l'):fz?'f':/(?:e|o|ie)$/.test(w)?'n':'m'; return ordPL(+n,c)+' '; });   // 3. raz → trzeci raz
   s=s.replace(new RegExp(`(?<![\\d])(\\d+)(?:\\s*[-–—]\\s*(\\d+))?(?![\\d])(\\s+([${L_}]+))?(?=(?:\\s+([${L_}]+))?)`,'g'),(m,a,b,sp,word,word2,off,str)=>{
     const p=pre(str,off), nomer=/(numer|nr|punkt|strona|stronie|pozycja|pozycji|pokój|lokal|rozdział|paragraf|art\.|artykuł)\s*$/i.test(p);
-    const gen=!nomer&&PRZ_GEN.test(p), fem=!nomer&&(zenska(word)||(/(?:e|ie|ych|ich)$/i.test(word||'')&&zenska(word2)));
+    // dopełniacz po przyimku, gdy rzeczownik obok też jest w dopełniaczu (około trzech tygodni; ale „około trzy tygodnie” jak w tekście)
+    const funkcyjne=/^(do|i|lub|albo|a|czy|oraz|na|razy)$/i.test(word||'');
+    const gen=!nomer&&PRZ_GEN.test(p)&&(!word||funkcyjne||GEN_PL.test(word)||(+a===1&&/(?:a|u|y|i|ej)$/.test(word))), fem=!nomer&&(zenska(word)||(/(?:e|ie|ych|ich)$/i.test(word||'')&&zenska(word2)));
+    if(!nomer&&b==null&&word&&/(?:ami|mi)$/.test(word)&&+a<100&&+a>1) return numNarz(+a,fem)+sp;   // z dwoma klientami
     const L=x=>{ const t=numPL(+x,gen);
-      if(+x===1&&!gen&&word){ if(/(?:mię|zwierzę|cielę|źrebię)$/.test(word)) return 'jedno'; if(/ę$/.test(word)&&!/się$/.test(word)) return 'jedną'; if(fem) return 'jedna'; if(/(?:ie|o|um)$/.test(word)) return 'jedno'; }
+      if(+x===1&&!gen&&word) return jeden(word,fem);
       return fem&&!gen?numZ(+x,t):(fem&&gen&&+x===1?'jednej':t); };
-    if(b!=null&&+b>+a) return (gen?L(a):(/od\s*$/i.test(p)?L(a):L(a)))+' do '+(fem&&+b===1?'jednej':numPL(+b,true))+(sp||'');
+    if(b!=null&&+b>+a){   // zakres: „5–7 dni” → od pięciu do siedmiu dni; „w 2–3 tygodnie” → w dwa, trzy tygodnie
+      const odDo=(!word||GEN_PL.test(word)||gen)&&!(word2&&/e$/.test(word2)&&!GEN_PL.test(word2));
+      if(odDo&&!/(?:^|[\s(,])(w|we|na|za|po|przez|co)\s*$/i.test(p)) return (/od\s*$/i.test(p)||gen?'':'od ')+(fem&&+a===1?'jednej':numPL(+a,true))+' do '+(fem&&+b===1?'jednej':numPL(+b,true))+(sp||'');
+      const LZ=x=>fem?numZ(+x,numPL(+x)):numPL(+x); return LZ(a)+', '+LZ(b)+(sp||''); }
     if(b!=null) return L(a)+', '+L(b)+(sp||'');
     return L(a)+(sp||''); });
+  // 10b) „szefie”: model skraca akcentowane „e” po „sz” — Whisper słyszał „szafie/czafie” (3/18 rozpoznań);
+  // wydłużone „ee” (akcent na tę sylabę i tak pada) daje 13/18 i nadal brzmi jak „szefie” (pomiar 28.10.2026)
+  s=s.replace(new RegExp(`(?<![${L_}])([Ss])zef(?=(?:ie|a|em|owi|owa|owej|ową|ów|owie|ostwo|ostwa|uniu)?(?![${L_}]))`,'g'),'$1zeef');
   // 11) skrótowce i słowa obce
   s=s.replace(new RegExp(`[${L_}][${L_}\\d'’.-]*[${L_}\\d]|[${L_}]`,'g'),w=>{
     const tail=/[.-]+$/.exec(w); const core=tail?w.slice(0,-tail[0].length):w, low=core.toLowerCase().replace(/’/g,'\''), tl=tail?tail[0].replace(/-+/g,' '):'';
@@ -458,7 +504,7 @@ function intonacja(src,start,T,rise,m,offset){
 }
 
 function utworz(opt){
-  const o=Object.assign({bazaGlosu:'voice/',bazaUst:'lip/',canvas:null,glos:'mai',tempo:1,wysokosc:1.05,
+  const o=Object.assign({bazaGlosu:'voice/',bazaUst:'lip/',canvas:null,glos:'mai',tempo:.9,wysokosc:1.05,
     wideo:()=>null, czekajNaSpoczynek:async()=>{}, napis:()=>{}, wyprzedzenie:.04, wersjaDanych:'1'}, opt||{});   // wersjaDanych: zmień po przebudowie kwestii/ust (omija starą pamięć przeglądarki)
   const zd={}; const emit=(n,...a)=>(zd[n]||[]).slice().forEach(f=>{ try{ f(...a); }catch(e){ console.error(e); } });
   const wait=ms=>new Promise(r=>setTimeout(r,ms));
@@ -489,7 +535,7 @@ function utworz(opt){
     neural.ready.catch(()=>{ neural.ready=null; });
     return neural.ready;
   }
-  function synthNeural(text,ids){ const id=++neural.seq; if(ids) ids.push(id); return new Promise((res,rej)=>{ neural.pending.set(id,{res,rej}); neural.worker.postMessage({type:'speak',id,text,rate:voice.rate}); }); }
+  function synthNeural(text,ids){ const id=++neural.seq; if(ids) ids.push(id); return new Promise((res,rej)=>{ neural.pending.set(id,{res,rej}); neural.worker.postMessage({type:'speak',id,text,rate:voice.rate,noise:voice.szum,noiseW:voice.szumDl}); }); }
   // łańcuch brzmienia: ciepły dół, przygaszona ostrość, delikatne „powietrze”, łagodna kompresja
   function voiceChain(ctx,dest){
     if(neural.chain&&!dest) return neural.chain;
@@ -515,12 +561,15 @@ function utworz(opt){
         if(id==='data'){ lib.pcm=new Int16Array(buf.slice(p+8,p+8+sz)); break; }
         p+=8+sz+(sz&1);
       }
-      lib.idx=idx;
+      lib.idx=idx; lib.zd=null;
     })().catch(e=>{ lib.loading=null; throw e; });
     return lib.loading;
   }
   function libChunks(text){
-    const L=lib.idx&&lib.idx.lines[text]; if(!L||!lib.pcm) return null;
+    if(!lib.idx||!lib.pcm||voice.neural!=='mai') return null;   // gotowe kwestie nagrane głosem Mai
+    if(!lib.zd){ lib.zd=new Map(); for(const L of Object.values(lib.idx.lines)) for(const c of L) if(!lib.zd.has(c.text)) lib.zd.set(c.text,c); }
+    // cała kwestia (tekst jak w stronie) albo jedno zdanie po zamianie na mowę (strumień czatu, raport)
+    const L=lib.idx.lines[text]||(lib.zd.has(text)?[lib.zd.get(text)]:null); if(!L) return null;
     return L.map(c=>{ const s=lib.pcm.subarray(c.off,c.off+c.len), f=new Float32Array(c.len); for(let i=0;i<c.len;i++) f[i]=s[i]/32768;
       return {pcm:f,dur:Float32Array.from(c.dur),chars:[...c.chars],hop:lib.idx.hop,sampleRate:lib.idx.sampleRate,pre:c.pre,text:c.text,ms:0}; });
   }
@@ -609,14 +658,19 @@ function utworz(opt){
   }
   // odpowiedź dopływająca kawałkami (czat): zdania liczone w trakcie, dźwięk rusza, gdy całość gotowa
   function speechStream(){
-    stopSpeech(); const tok=++sayTok; let done=0;
+    stopSpeech(); const tok=++sayTok; let done=0, prev='';
     if(neuralOn()){ eng.open=true; o.czekajNaSpoczynek(); }
+    // reszta tekstu po już przeczytanych zdaniach — także gdy końcowy tekst jest przycięty albo zmieniony (np. trim())
+    const reszta=full=>{ const base=prev.slice(0,done); if(full.startsWith(base)) return full.slice(done);
+      const t=base.trim(); const i=t?full.indexOf(t):0; return i>=0?full.slice(i+t.length):full.slice(Math.min(done,full.length)); };
     return {
       dodaj(full){ if(tok!==sayTok) return; napis(full); if(!neuralOn()) return;
+        if(prev&&!full.startsWith(prev.slice(0,done))){ const r=reszta(full); done=full.length-r.length; }
+        prev=full;
         const [zd,nowy]=zdaniaGotowe(full,done); done=nowy;
         for(const z of zd) for(const s of sentences(spokenPL(z))) enqueueSpeech(s); },
       async zakoncz(full){ if(tok!==sayTok) return; napis(full);
-        if(neuralOn()){ const rest=full.slice(done).trim(); if(rest) sentences(spokenPL(rest)).forEach(enqueueSpeech); eng.open=false; flushSpeech(); await waitSpeech(); }
+        if(neuralOn()){ const rest=reszta(full).trim(); if(rest) sentences(spokenPL(rest)).forEach(enqueueSpeech); eng.open=false; flushSpeech(); await waitSpeech(); }
         else await say(full);
         if(tok===sayTok) subTimer=setTimeout(()=>o.napis(''),600); }
     };
@@ -1014,7 +1068,7 @@ function utworz(opt){
       }
       voice.engine='system'; voice.v=nazwa||null; return Promise.resolve();
     },
-    ustaw(p){ if(p.tempo!=null) voice.rate=p.tempo; if(p.wysokosc!=null) voice.pitch=p.wysokosc;
+    ustaw(p){ if(p.tempo!=null) voice.rate=p.tempo; if(p.wysokosc!=null) voice.pitch=p.wysokosc; if(p.szum!==undefined) voice.szum=p.szum; if(p.szumDl!==undefined) voice.szumDl=p.szumDl;
       if(p.barwa&&BARWY[p.barwa]&&p.barwa!==voice.barwa){ voice.barwa=p.barwa; try{ neural.chainOut&&neural.chainOut.disconnect(); }catch(e){} neural.chain=null; neural.chainOut=null; } },
     barwy:()=>Object.fromEntries(Object.entries(BARWY).map(([k,v])=>[k,v.n])),
     get barwa(){ return voice.barwa; },

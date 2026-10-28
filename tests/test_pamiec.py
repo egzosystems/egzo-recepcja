@@ -18,7 +18,7 @@ STUB = r"""(()=>{
     let ans='Dobrze, szefie.';
     if(/Zapamiętaj/i.test(q)){ __calls.push(['zapamietaj',await T('zapamietaj').execute({fakt:'Rafał tnie płyty we wtorki'},ctx)]); ans='Zapamiętałam, szefie.'; }
     else if(/Przypomnij/i.test(q)){ __calls.push(['przypomnij',await T('przypomnij').execute({kiedy:loc(Date.now()+60000),tresc:'telefon do Ani'},ctx)]); ans='Przypomnę, szefie.'; }
-    else if(/Odpowiedz/i.test(q)){ const t=T('szkic_odpowiedzi'); __calls.push(['szkic',t?await t.execute({id_wiadomosci:'m123',do:'Jan Kowalski <jan@example.com>',temat:'Re: Terrarium',tresc:'Dzień dobry, dziękujemy za zapytanie.'},ctx):'brak narzędzia']); ans='Szkic czeka w Gmailu, szefie.'; }
+    else if(/Odpowiedz/i.test(q)){ const c=T('czytaj_maila'); if(c) __calls.push(['czytaj',await c.execute({id:'t123'},ctx)]); const t=T('szkic_odpowiedzi'); __calls.push(['szkic',t?await t.execute({id_wiadomosci:'m123',do:'Jan Kowalski <jan@example.com>',temat:'Re: Terrarium',tresc:'Dzień dobry, dziękujemy za zapytanie.'},ctx):'brak narzędzia']); ans='Szkic czeka w Gmailu, szefie.'; }
     opts.onText&&opts.onText({text:ans,delta:ans}); return {text:ans}; };
   sample.limits=async()=>({tools:true});
   window.claude={use:async n=>n==='sample'?sample:n==='db'?{collection:coll}:null};
@@ -39,7 +39,7 @@ with sync_playwright() as p:
     pg.goto(URL); pg.wait_for_timeout(2500); pg.click('#voiceBtn'); ready(pg)
     ask(pg, 'Zapamiętaj, że Rafał tnie płyty we wtorki')
     ask(pg, 'Przypomnij mi za minutę o telefonie do Ani')
-    pg.evaluate("()=>{ window.__drafts=[]; mail.state='on'; mail.mcp={callTool:async(s,t,a)=>{ __drafts.push([s,t,a]); return {payload:{id:'draft1'}}; }}; }")
+    pg.evaluate("()=>{ window.__drafts=[]; mail.state='on'; mail.mcp={callTool:async(s,t,a)=>{ if(t==='get_thread') return {payload:{messages:[{id:'m123',sender:'Jan Kowalski <jan@example.com>',subject:'Terrarium',plaintextBody:'Dzień dobry'}]}}; __drafts.push([s,t,a]); return {payload:{id:'draft1'}}; }}; }")
     ask(pg, 'Odpowiedz Janowi na maila o terrarium')
     calls = pg.evaluate("()=>__calls"); drafts = pg.evaluate("()=>__drafts")
     # przeładowanie: pamięć z bazy w kontekście

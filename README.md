@@ -26,7 +26,19 @@ Klawisz **L** blokuje kamerę.
 - **Kamera.** Sprężyna z tłumieniem (bezwładność), podąża za punktem akcji ujęcia, delikatny dryf „z ręki”, blokada.
 - **Nakładki.** Ostre tabliczki na tackach z licznikami, rozmycie ściany z logo, ziarno filmowe.
 
-## Struktura
+## Co potrafi asystentka
+
+- **Mówi** głosem Mai (liczonym w przeglądarce, bez opłat), z ustami z prawdziwych klatek jej twarzy, ruchem głowy,
+  brwi i żuchwy; liczby, daty, kwoty i skróty czyta poprawnie po polsku (`docs/mowa.md`).
+- **Rozmawia** (Claude) i wykonuje polecenia „szefa”: ruchy, pamięć, przypomnienia, zadania, dokumenty, maile.
+- **Czyta dokumenty** (PDF, skany, Word, Excel, zdjęcia), analizuje je i robi notatki do Obsidiana.
+- **Sama**: raport dnia, szkice odpowiedzi na zapytania klientów w Gmailu (nigdy nie wysyła), zadania z dokumentów
+  i e-maili, przypomnienia o terminach i przerwach.
+- **Obsidian**: paczka ZIP z notatkami i pulpitem Dataview, osadzenie strony w panelu (`docs/obsidian.md`).
+
+Testy: `tests/uruchom_wszystkie.sh` (serwer testowy: `python3 tools/serwer_testowy.py`).
+
+## Struktura## Struktura
 
 | Ścieżka | Co tam jest |
 |---|---|
@@ -36,6 +48,10 @@ Klawisz **L** blokuje kamerę.
 | `reference/` | kadr referencyjny i arkusz 15 póz |
 | `docs/ujecia.md` | status ujęć i prompty do Veo |
 | `docs/stan-projektu.md` | decyzje, wnioski, plan |
+| `docs/mowa.md` | biblioteka mowy: głos, usta, tekst do czytania, tempo, wydajność |
+| `docs/obsidian.md` | paczka do Obsidiana, Dataview, osadzenie strony, co asystentka robi sama |
+| `mowa/egzo-mowa.js` | biblioteka mowy (wbudowywana w stronę przez `tools/zbuduj_strone.py`) |
+| `tests/` | testy w przeglądarce (Playwright) i testy bez przeglądarki |
 | `tools/clips.sh` | pętla tam-i-z-powrotem, sklejanie z domknięciem, poster |
 | `tools/find_join.py` | szukanie najlepszego miejsca sklejenia dwóch klipów |
 | `tools/seam.py` | sklejanie z interpolacją ruchu i zakończenie w klatce pętli |

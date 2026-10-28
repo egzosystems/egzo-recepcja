@@ -86,6 +86,34 @@ EgzoMowa.mowione('12,5%')   // tekst w postaci do czytania na głos
 9. **Krótkie głoski.** m/b/p krótsze niż krok ust (40 ms) dostają gwarantowany krok z domkniętymi ustami,
    a „a”/„o” — z otwartymi; te kroki mają większą wagę przy doborze.
 
+10. **Tekst do czytania** (`EgzoMowa.mowione`, test `tests/test_normalizacja.js`, 61 przypadków). Model czyta tylko litery,
+   więc przed syntezą: daty (15.11.2026 → piętnastego listopada dwa tysiące dwudziestego szóstego roku; po „jest” mianownik),
+   godziny z przypadkiem (o czternastej, przed siedemnastą, między czternastą a szesnastą), kwoty z odmianą
+   (2 złote, 5 złotych, 12,50 zł → dwanaście złotych pięćdziesiąt groszy; 15 tys. zł), liczebniki w dopełniaczu po
+   „do/od/około/bez…”, rodzaj żeński (dwie osoby, jedna sztuka, jedną fakturę, jedno zamówienie), ułamki (półtora, dwa i pół),
+   jednostki (cm, mm, m², kg, l, MB, °C…), telefony grupami (sześćset, sto dwadzieścia trzy…), zakresy (5–7 dni → pięć do
+   siedmiu), lata (w dwa tysiące dwudziestym piątym roku), skróty (np., m.in., ul., tel., nr, godz., ok., sp. z o.o.),
+   skrótowce (PDF → pe de ef, SMS, KRS; NIP i VAT jako słowa), słowa obce (e-mail → imejl, Gmail, Excel, Word, WhatsApp,
+   weekend…), adresy e-mail i stron (małpa, kropka), kody pocztowe, NIP, zakresy (24–28°C → od dwudziestu czterech do
+   dwudziestu ośmiu stopni), narzędnik (z dwoma klientami), nazwy plików, Markdown i emotikony. Zamiana jest idempotentna.
+   „Szefie” model czytał z przytartym „e” (Whisper: „szafie/czafie”, 3 na 18 rozpoznań) — do syntezy idzie „szeefie”
+   (13 na 18; akcent i tak pada na tę sylabę). Napisy na ekranie pokazują zwykły tekst.
+11. **Granice zdań** — kropka po skrócie, w dacie, po inicjale czy po liczbie przed małą literą nie kończy zdania.
+   Ten sam podział w całej kwestii i w strumieniu czatu (`EgzoMowa.zdaniaGotowe`): granica na końcu dotychczasowego
+   tekstu czeka na ciąg dalszy, więc nic nie ginie i „Np.” nie jest czytane jako osobne zdanie.
+12. **Tempo** (test `tests/test_wymowa.py`: głos z przeglądarki → Whisper small offline): tempo 1,0 = 6,0 sylaby/s
+   artykulacji i 13,7% błędów rozpoznania; **0,9 = 5,6 sylaby/s i 9,0%** — domyślne. Gotowe kwestie nagrywane tym samym
+   tempem, każde zdanie w 4 wersjach, zostaje ta, którą Whisper zrozumiał najlepiej (`tools/generuj_frazy.py`).
+   Kwestie są wyszukiwane także po pojedynczych zdaniach po zamianie na mowę (raport dnia, strumień czatu).
+13. **Twarz na osobnym płótnie.** Głowa, brwi, żuchwa i usta rysowane są na małym płótnie nad głową, bez ruchu głowy;
+   kiwnięcie i kołysanie robi przekształcenie CSS tego płótna (kompozytor). Przerysowanie tylko przy zmianie (nowa klatka
+   wideo, usta, żuchwa, brwi), klatka wideo pobierana raz na przerysowanie (to najdroższa operacja). Słabe urządzenie
+   (pomiar kosztu): co druga klatka ekranu, co druga klatka wideo dla warstw; gdy mimo to < 32 kl/s w mowie — bez ruchu
+   głowy (zdarzenie `jakosc`). Dobór klatek ust: transformata odległości zamiast O(K²) (≈4× szybciej, ten sam koszt
+   ścieżki), rozgrzanie kompilatora JS po wczytaniu; kandydaci pozy liczeni porcjami — strona nie zamiera
+   (test `tests/test_wolne_urzadzenie.py`: procesor 4× wolniej, ≥ 30 kl/s, dobór ust ~14 ms na zdanie).
+   Testy obrazu czytają nakładkę przez `mowa.wnetrze.zrzutNakladki(ctx, sx, sy, w, h, dx, dy)`.
+
 ## Dodawanie nowych umiejętności
 
 - Ogłoszenie (mail, przypomnienie): `const p = mowa.przygotuj(t)` od razu, a `mowa.powiedz(t, {przygotowane: await p})`

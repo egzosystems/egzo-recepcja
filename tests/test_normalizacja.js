@@ -2,8 +2,9 @@
 // Każda para: tekst z czatu → dokładnie to, co ma przeczytać głos. Plus granice zdań (całość i strumień).
 require('../mowa/egzo-mowa.js');
 const M = globalThis.EgzoMowa;
+// uwaga: „szef…” celowo czytane jako „szeef…” (wyraźniejsze akcentowane „e” — pomiar rozpoznawania mowy)
 const P = [
-  ['Termin mija 15.11.2026, szefie.', 'Termin mija piętnastego listopada dwa tysiące dwudziestego szóstego roku, szefie.'],
+  ['Termin mija 15.11.2026, szefie.', 'Termin mija piętnastego listopada dwa tysiące dwudziestego szóstego roku, szeefie.'],
   ['Dziś jest 3.12.', 'Dziś jest trzeci grudnia.'],
   ['Dziś mamy 28.10.2026 r.', 'Dziś mamy dwudziestego ósmego października dwa tysiące dwudziestego szóstego roku'],
   ['Spotkanie 2026-11-15 o 14:30.', 'Spotkanie piętnastego listopada dwa tysiące dwudziestego szóstego roku o czternastej trzydzieści.'],
@@ -40,7 +41,7 @@ const P = [
   ['Za 2 godz. wracam.', 'Za dwie godziny wracam.'],
   ['min. 5 sztuk', 'minimum pięć sztuk'],
   ['Od 2 do 4 sztuk, 3 szt. w magazynie.', 'Od dwóch do czterech sztuk, trzy sztuki w magazynie.'],
-  ['Dostawa 5-7 dni.', 'Dostawa pięć do siedmiu dni.'],
+  ['Dostawa 5-7 dni.', 'Dostawa od pięciu do siedmiu dni.'],
   ['Do 2 tygodni.', 'Do dwóch tygodni.'],
   ['5 osób, 22 osoby, 12 osób.', 'pięć osób, dwadzieścia dwie osoby, dwanaście osób.'],
   ['Masz 2 nowe wiadomości i 3 nowe maile.', 'Masz dwie nowe wiadomości i trzy nowe mejle.'],
@@ -58,8 +59,36 @@ const P = [
   ['- pierwszy punkt\n- drugi punkt', 'pierwszy punkt. drugi punkt'],
   ['Spółka EGZO SYSTEMS sp. z o.o.', 'Spółka egzo sistems spółka z o o'],
   ['Zamówienie nr 2026/11/15.', 'Zamówienie numer dwa tysiące dwadzieścia sześć łamane przez jedenaście łamane przez piętnaście.'],
-  ['Szefie, o 14:00 dzwoni pani Anna, numer 512 345 678.', 'Szefie, o czternastej dzwoni pani Anna, numer pięćset dwanaście, trzysta czterdzieści pięć, sześćset siedemdziesiąt osiem.'],
+  ['Szefie, o 14:00 dzwoni pani Anna, numer 512 345 678.', 'Szeefie, o czternastej dzwoni pani Anna, numer pięćset dwanaście, trzysta czterdzieści pięć, sześćset siedemdziesiąt osiem.'],
   ['Czy mam je od razu przekazać do akceptacji?', 'Czy mam je od razu przekazać do akceptacji?'],
+  // z przeglądu kodu (28.10.2026)
+  ['Odpisz na biuro@egzosystems.com. Dzięki.', 'Odpisz na biuro małpa egzosystems kropka kom. Dzięki.'],
+  ['Więcej na egzosystems.pl. Zapraszam!', 'Więcej na egzosystems kropka pe el. Zapraszam!'],
+  ['Ustawię przypomnienie na 9:00.', 'Ustawię przypomnienie na dziewiątą.'],
+  ['Na liście jest 1 otwarte zadanie.', 'Na liście jest jedno otwarte zadanie.'],
+  ['1 nowe zamówienie i 1 nową fakturę.', 'jedno nowe zamówienie i jedną nową fakturę.'],
+  ['Do 21 zł.', 'Do dwudziestu jeden złotych.'],
+  ['Zajmie 1,5 godziny, 1,5 h, 1,5 m.', 'Zajmie półtorej godziny, półtorej godziny, półtora metra.'],
+  ['Temperatura 24-28°C.', 'Temperatura od dwudziestu czterech do dwudziestu ośmiu stopni Celsjusza.'],
+  ['Wilgotność 70–80%.', 'Wilgotność od siedemdziesięciu do osiemdziesięciu procent.'],
+  ['W dniach 3–5 listopada.', 'W dniach od trzeciego do piątego listopada.'],
+  ['Od 28.10–30.10.', 'Od dwudziestego ósmego do trzydziestego października.'],
+  ['Wracam za 2-3 dni.', 'Wracam za dwa, trzy dni.'],
+  ['Wysyłka 2-3 dni robocze.', 'Wysyłka dwa, trzy dni robocze.'],
+  ['Spotkanie o 13:00–14:30.', 'Spotkanie od trzynastej do czternastej trzydzieści.'],
+  ['W godz. 13:00-14:30 nas nie ma.', 'w godzinach od trzynastej do czternastej trzydzieści nas nie ma.'],
+  ['Adres: ul. Polna 3, 00-950 Warszawa.', 'Adres: ulica Polna trzy, zero zero, dziewięćset pięćdziesiąt Warszawa.'],
+  ['NIP 123-456-78-90.', 'nip sto dwadzieścia trzy, czterysta pięćdziesiąt sześć, siedemdziesiąt osiem, dziewięćdziesiąt.'],
+  ['Zasilacz 12V, 10W, 230 V.', 'Zasilacz dwanaście woltów, dziesięć watów, dwieście trzydzieści woltów.'],
+  ['15. listopada mam urlop.', 'piętnastego listopada mam urlop.'],
+  ['Cena 1.200 zł.', 'Cena tysiąc dwieście złotych.'],
+  ['Powtórz 2x.', 'Powtórz dwa razy.'],
+  ['To już 3. raz.', 'To już trzeci raz.'],
+  ['W 2. połowie roku.', 'W drugiej połowie roku.'],
+  ['2026 rok był dobry.', 'dwa tysiące dwudziesty szósty rok był dobry.'],
+  ['ok. 3 tygodnie', 'około trzy tygodnie'],
+  ['z 2 klientami i 2 płytami', 'z dwoma klientami i dwiema płytami'],
+  ['Mam 2,5 h.', 'Mam dwie i pół godziny.'],
 ];
 const Z = [
   ['Np. e-mail od Jana. Termin 15.11.2026, szefie! Mam 2,5 tys. zł? J. Kowalski dzwonił o 14:30. W 2026 r. Potem ul. Długa 5. Koniec',

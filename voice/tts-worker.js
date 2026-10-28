@@ -4,7 +4,7 @@
  * Model pobierany w częściach, po pierwszym razie trzymany w IndexedDB.
  *
  * Wiadomości:  {type:'init',voice} -> {type:'progress',loaded,total,cached} ... {type:'ready'} | {type:'error',message}
- *              {type:'speak',id,text,rate} -> {type:'audio',id,pcm,dur,chars,hop,ms,sampleRate} | {type:'error',id,message}
+ *              {type:'speak',id,text,rate,noise?,noiseW?} -> {type:'audio',id,pcm,dur,chars,hop,ms,sampleRate} | {type:'error',id,message}
  *              dur/chars: czas (w ramkach hop) każdego znaku wejścia, także pustych przerw „_” — do synchronizacji ust
  */
 const BASE = self.location.href.replace(/[^/]*$/, '');
@@ -94,7 +94,7 @@ async function phonemeIds(text) {
 
 const i64 = a => new ort.Tensor('int64', BigInt64Array.from(a.map(BigInt)), [a.length]);
 
-async function synth(text, rate) {
+async function synth(text, rate, noise, noiseW) {
   let ids, chars = null;
   if (V.kind === 'graphemes') { const g = graphemeIds(text); ids = g.ids; chars = g.chars; }
   else ids = await phonemeIds(text);
@@ -102,7 +102,7 @@ async function synth(text, rate) {
   const feeds = {
     input: new ort.Tensor('int64', BigInt64Array.from(ids.map(BigInt)), [1, ids.length]),
     input_lengths: i64([ids.length]),
-    scales: new ort.Tensor('float32', Float32Array.from([V.noise, V.length / (rate || 1), V.noiseW]), [3]),
+    scales: new ort.Tensor('float32', Float32Array.from([noise ?? V.noise, V.length / (rate || 1), noiseW ?? V.noiseW]), [3]),
   };
   if (session.inputNames.includes('sid')) feeds.sid = i64([0]);
   if (session.inputNames.includes('langid')) feeds.langid = i64([0]);
@@ -131,7 +131,7 @@ self.onmessage = async e => {
       if (m.id <= cancelUpTo || cancelled.has(m.id)) { cancelled.delete(m.id); postMessage({ type: 'error', id: m.id, message: 'anulowano' }); return; }
       try {
         await initP;
-        const r = await synth(m.text, m.rate);
+        const r = await synth(m.text, m.rate, m.noise, m.noiseW);
         postMessage({ type: 'audio', id: m.id, pcm: r.pcm, dur: r.dur, chars: r.chars, hop: r.hop, ms: r.ms, sampleRate: V.sr }, [r.pcm.buffer]);
       } catch (err) { postMessage({ type: 'error', id: m.id, message: String(err && err.message || err) }); }
     });

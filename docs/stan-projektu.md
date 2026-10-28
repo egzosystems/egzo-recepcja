@@ -173,8 +173,20 @@ Nowy test `tests/test_realizm.py` mierzy na tym, co faktycznie słychać i wida�
 - Pytania tak/nie bez „czy” („Wysłać to teraz?”, „…, dobrze?”) model czytał płasko (+1%) → ton podnoszony na ostatniej sylabie (od początku ostatniej sylaby do środka ostatniej samogłoski, wg czasów głosek): +11…+25%. Pytania „co/gdzie/jak…” i z „czy” — bez zmian (opadają / model już wznosi).
 - Barwa do wyboru w ustawieniach głosu (zapamiętana w przeglądarce): Miękka (dotychczasowa), Ciepła, Wyraźna, Aksamitna — środek widma 555 / 496 / 627 / 463 Hz.
 
+## Samodzielna asystentka, wymowa, wydajność (wersja 20, noc 27/28.10.2026)
+- **Twarz**: głowa, brwi, żuchwa i usta na osobnym płótnie nad głową, ruch głowy przez CSS (kompozytor); przerysowanie tylko przy zmianie; jedno pobranie klatki wideo na przerysowanie. Profil przy 1×: głowa 10 ms → 0,7 ms na klatkę. Słaby telefon (procesor 4× wolniej): 20,5 → 31–36 kl/s; blokada przy wczytaniu 597 → ~140 ms; dobór ust 57 → ~14 ms (transformata odległości zamiast O(K²), wynik ten sam).
+- **Wymowa**: pełna zamiana tekstu na mowę (daty, godziny, kwoty z odmianą, telefony, jednostki, skróty, skrótowce, słowa obce, rodzaj żeński liczebników, adresy, Markdown) — `tests/test_normalizacja.js` (61 przypadków); granice zdań odporne na skróty i daty, także w strumieniu czatu (wcześniej tekst po „15.11.” mógł zginąć).
+- **Tempo i zrozumiałość**: test `tests/test_wymowa.py` — mowa z przeglądarki rozpoznawana offline przez Whisper small. Tempo 1,0: 6,0 sylaby/s, 13,7% błędów; tempo 0,9: 5,6 sylaby/s, 9,0% → domyślne 0,9. Gotowe kwestie nagrane od nowa tym tempem, po 4 wersje każdego zdania, wybrana najlepiej rozumiana.
+- **Zadania**: panel „Zadania” (dodawanie, termin, odhaczanie, usuwanie, po terminie wyróżnione), baza `zadania` (tylko właściciel); w rozmowie `dodaj_zadanie`, `odhacz_zadanie`, `usun_zadanie`; zadania same dopisują się z analizy dokumentów i z zapytań klientów; raz dziennie po 15:00 przypomnienie o zadaniach na dziś.
+- **Raport dnia**: przy pierwszym włączeniu głosu w ciągu dnia (i przyciskiem „Teraz”, i w rozmowie „co dziś mamy?” → `raport_dnia`): nieprzeczytane e-maile, przypomnienia na dziś, zadania, dokumenty do akceptacji.
+- **Szkice odpowiedzi na zapytania** (domyślnie włączone, wyłącznik): nowy e-mail → ocena przez Claude → szkic w Gmailu do nadawcy z nagłówka; nigdy nie wysyła; limity 6/h i 30/doba; pomija noreply, newslettery i własną domenę; adres z treści e-maila ignorowany (test).
+- **Dokumenty w rozmowie**: `szukaj_w_dokumentach`, `czytaj_dokument`, `przenies_dokument` (np. „zaakceptuj fakturę”).
+- **Obsidian**: paczka ZIP (dokumenty, rozmowy, zadania w formacie Tasks, pamięć, przypomnienia, pulpit Dataview) — `docs/obsidian.md` (też osadzenie strony w Obsidianie przez Custom Frames).
+- Testy: `tests/test_autonomia.py` (28 sprawdzeń) i cały dotychczasowy zestaw — `tests/uruchom_wszystkie.sh`.
+
 ## Plan
+1. Ujęcia obiegu## Plan
 1. Ujęcia obiegu: 05 odczyt, 06 analiza, 08 segregowanie, 12 odłożenie (prompty w `docs/ujecia.md`).
 2. Poprawki logo na ścianie → nowy kadr bazowy (wtedy klipy generujemy już z niego).
-3. Analiza treści plików przez Claude API i zapis notatek prosto do vaulta Obsidiana.
-4. Głos: synteza mowy (np. ElevenLabs) + klipy mówienia / lip-sync; rozmowa z poziomu Obsidiana.
+3. Zapis notatek prosto do vaulta (dziś: paczka ZIP do rozpakowania) — wymaga dostępu do folderu EGZO SEJF na komputerze.
+4. Nowe ruchy (wstawanie, obie ręce, obrót) — klipy Veo; rozmowa głosem (rozpoznawanie mowy szefa).
