@@ -84,10 +84,13 @@ She turns her torso toward the computer monitor on screen left, places her left 
 She looks into the lens and offers a suggestion with an open left palm, speaking briefly in Polish with a friendly expression, then returns the hand to the desk.
 ```
 
-### 16 Pętla mówienia (do głosu)
-Bez dźwięku. Usta mają się ruszać jak przy spokojnej rozmowie, ręce zostają na biurku — wtedy pętlę da się odtwarzać pod dowolną kwestię głosu.
+### 16 Mówienie w pozie bazowej (biblioteka ust bez deformacji) — 2026-10-28
+Z tego klipu `tools/zbuduj_mowe.py` buduje bibliotekę ust: prawdziwe zdjęcia szeroko otwartych ust (z zębami, „o”/„u”,
+domknięte „m/b/p”) w pozie, w której ona mówi — bez przenoszenia ust między pozami, klatek wyliczanych i rozciągania brody.
+Flow → Klatki do wideo: kadr bazowy `media/egzo-poster_2026-10-27_v2.jpg` jako pierwsza **i** ostatnia klatka, 16:9, 8 s,
+bez dźwięku. Najlepiej 2–4 wersje — wybieramy tę, w której głowa najmniej się rusza, a usta otwierają się najszerzej.
 ```
-She talks calmly and continuously to the viewer as if explaining something, looking into the lens. Natural lip and jaw movement as in normal speech, small head movements, occasional blinks, a friendly expression. Both hands stay resting on the desk the whole time, no gestures. No sound.
+She speaks clearly and expressively to the viewer, looking straight into the lens, as if reading a sentence aloud slowly. Her mouth opens wide on vowels ("a", "o", "e"), showing her upper and lower teeth, lips round on "o" and "u", lips press fully closed on "m", "b", "p". Natural jaw movement, cheeks move with speech. Head stays still and upright in the same position as the reference frame, only tiny natural motion; neutral calm expression, no smile, occasional blinks. Both hands rest on the desk the whole time, no gestures. Start AND end frame identical to the reference image. Locked-off camera, no camera movement, no cuts, same lighting, no sound.
 ```
 
 ### 07 Przeglądanie
