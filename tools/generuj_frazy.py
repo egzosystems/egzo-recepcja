@@ -132,6 +132,6 @@ for line, parts in zip(LINES, ZD):
 pcm = np.concatenate(pcm_all)
 with wave.open(os.path.join(out_dir, 'frazy.wav'), 'wb') as w:
     w.setnchannels(1); w.setsampwidth(2); w.setframerate(22050); w.writeframes(pcm.tobytes())
-json.dump({'sampleRate': 22050, 'hop': 256, 'lines': index}, open(os.path.join(out_dir, 'frazy.json'), 'w', encoding='utf-8'), ensure_ascii=False, separators=(',', ':'))
+json.dump({'sampleRate': 22050, 'hop': 256, 'tempo': TEMPO, 'lines': index}, open(os.path.join(out_dir, 'frazy.json'), 'w', encoding='utf-8'), ensure_ascii=False, separators=(',', ':'))
 if stats: print(f'rozpoznanie wybranych wersji: średni CER {np.mean(stats)*100:.1f}%, najgorszy {max(stats)*100:.1f}%')
 print(f'tempo {TEMPO} (length_scale {LENGTH:.3f}), kwestii: {len(LINES)}, zdań: {sum(len(v) for v in index.values())}, nagrania: {len(pcm)/22050:.1f} s, plik: {os.path.getsize(os.path.join(out_dir, "frazy.wav"))/1e6:.1f} MB')

@@ -232,14 +232,14 @@ input[type=range]{accent-color:var(--gold);width:100%}
     </div>
     <div class="box knobs studio-only">
       <div class="eyebrow">Fizyka kamery</div>
-      <label>Sztywność <input type="range" id="kS" min="5" max="120" value="22"><output id="oS">22</output></label>
-      <label>Tłumienie <input type="range" id="kD" min="10" max="100" value="62"><output id="oD">0.62</output></label>
+      <label>Sztywność <input type="range" id="kS" min="5" max="120" value="62"><output id="oS">62</output></label>
+      <label>Tłumienie <input type="range" id="kD" min="10" max="100" value="51"><output id="oD">0.51</output></label>
       <div class="eyebrow" style="margin-top:6px">Głos</div>
       <label>Głos <select id="voiceSel"></select><output></output></label>
-      <label>Tempo <input type="range" id="krate" min="70" max="130" value="90"><output id="orate">0.90</output></label>
+      <label>Tempo <input type="range" id="krate" min="70" max="130" value="121"><output id="orate">1.21</output></label>
       <label>Wysokość <input type="range" id="kpitch" min="70" max="140" value="105"><output id="opitch">1.05</output></label>
       <label>Barwa <select id="barwaSel"></select><output></output></label>
-      <label>Śledzenie myszy <input type="range" id="kM" min="0" max="100" value="25"><output id="oM">0.25</output></label>
+      <label>Śledzenie myszy <input type="range" id="kM" min="0" max="100" value="71"><output id="oM">0.71</output></label>
       <div class="eyebrow" style="margin-top:6px">Usta i mimika</div>
       <div id="mimikaKnobs"></div>
       <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px"><button class="btn" id="mimTest" type="button">Powiedz zdanie testowe</button><button class="btn" id="mimKopiuj" type="button">Kopiuj ustawienia</button><button class="btn" id="mimReset" type="button">Fabryczne</button></div>
@@ -447,7 +447,7 @@ function setStatus(html,busy){const el=document.getElementById('status');documen
 /* ---------- Kamera: sprężyna z bezwładnością + blokada ---------- */
 const stage=document.getElementById('stage'), camEl=document.getElementById('cam');
 const cam={ p:{x:.5,y:.5,z:1.025}, v:{x:0,y:0,z:0}, t:{x:.5,y:.5,z:1.025}, m:{x:0,y:0},
-  locked:false, k:22, d:.62, follow:.25,
+  locked:false, k:62, d:.51, follow:.71,   // ustawienia szefa z 2026-10-28
   target(s){ if(!this.locked){this.t.x=s.fx;this.t.y=s.fy;this.t.z=s.z;} } };
 const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
 let last=performance.now();
@@ -1101,7 +1101,7 @@ const LIP_FPS=25;
 // spółgłoski między samogłoskami wyraźnie przymykają usta (pomiar: inaczej sylaby się zlewają)
 const OPEN_T={A:1,O:.85,E:.72,Y:.62,U:.55,I:.5,SH:.42,S:.28,L:.42,R:.42,TDN:.32,KG:.42,CH:.45,FV:.22,MBP:0};
 // strojenie doboru klatek (wyniki pomiarów: tests/test_realizm.py)
-const CFG={skok:.06, zostan:.03, roznica:.25, wygladz:0, przenik:.2, fala:true, rozsun:0, otwarcie:1, przesun:0, wyglad:1, wstecz:.05};   // wyglad 1 + skok .06: przeskoki tylko między podobnie wyglądającymi klatkami (migotanie p95 6,3 → 3,8; prawdziwa mowa 4,4)   // otwarcie: mnożnik celu ust; przesun: ms, dodatnie = usta później   // skok .16 (było .08): biblioteka z prawdziwej mowy — mniej przeskoków między niesąsiednimi klatkami (migotanie p95 6,8 → 6,0)
+const CFG={skok:.18, zostan:.03, roznica:.25, wygladz:0, przenik:.4, fala:true, rozsun:4, otwarcie:1, przesun:30, wyglad:1.6, wstecz:.05};   // ustawienia szefa z 2026-10-28 (Studio → Kopiuj ustawienia): płynne przejścia, lekko szersze usta, +30 ms   // wyglad 1 + skok .06: przeskoki tylko między podobnie wyglądającymi klatkami (migotanie p95 6,3 → 3,8; prawdziwa mowa 4,4)   // otwarcie: mnożnik celu ust; przesun: ms, dodatnie = usta później   // skok .16 (było .08): biblioteka z prawdziwej mowy — mniej przeskoków między niesąsiednimi klatkami (migotanie p95 6,8 → 6,0)
 function lipTargets(m,offset,total,pcm){
   const n=Math.max(1,Math.ceil(total*LIP_FPS)), tg=new Float32Array(n);
   const sr=m.sampleRate, hop=Math.round(sr/LIP_FPS), env=new Float32Array(n);
@@ -1270,6 +1270,7 @@ function utworz(opt){
   }
   function libChunks(text){
     if(!lib.idx||!lib.pcm||voice.neural!=='mai') return null;   // gotowe kwestie nagrane głosem Mai
+    if(Math.abs((voice.rate||1)-(lib.idx.tempo||.9))>.03) return null;   // nagrane w innym tempie niż ustawione — liczymy na żywo (bez skoków tempa w rozmowie)
     if(!lib.zd){ lib.zd=new Map(); for(const L of Object.values(lib.idx.lines)) for(const c of L) if(!lib.zd.has(c.text)) lib.zd.set(c.text,c); }
     // cała kwestia (tekst jak w stronie) albo jedno zdanie po zamianie na mowę (strumień czatu, raport)
     const L=lib.idx.lines[text]||(lib.zd.has(text)?[lib.zd.get(text)]:null); if(!L) return null;
@@ -1900,7 +1901,7 @@ const mowa=EgzoMowa.utworz({
   bazaGlosu:VOICE_BASE, bazaUst:'lip/', canvas:document.getElementById('lipCanvas'),
   // usta rysujemy tylko na klipie, dla którego jest tor (dziś: pętla spoczynkowa)
   wideo:()=>({el:front, klip:front.style.opacity==='1'&&byId.idle.src&&front.src.endsWith(byId.idle.src)?'idle':null}),
-  czekajNaSpoczynek:ensureIdle, napis:subtitle, wersjaDanych:'2026-10-28-v46', barwa:store('egzo-barwa')||'miekka'
+  czekajNaSpoczynek:ensureIdle, napis:subtitle, wersjaDanych:'2026-10-28-v47', barwa:store('egzo-barwa')||'ciepla', tempo:1.21, wysokosc:1.05
 });
 { const s=document.getElementById('barwaSel'); s.innerHTML=Object.entries(mowa.barwy()).map(([k,n])=>`<option value="${k}">${n}</option>`).join(''); s.value=mowa.barwa;
   s.onchange=()=>{ mowa.ustaw({barwa:s.value}); store('egzo-barwa',s.value); if(mowa.wlaczona) say('Tak teraz brzmię, szefie.'); }; }
@@ -1911,18 +1912,18 @@ const {eng,neural,lip}=mowa.wnetrze, lipShapeAt=mowa.wnetrze.lipShapeAt;   // di
 
 /* ---------- Studio: suwaki ust i mimiki (zapisane w tej przeglądarce; „Kopiuj ustawienia” → do ustawień fabrycznych) ---------- */
 const MIMIKA=[
-  {k:'przesun',n:'Przesunięcie ust (ms, + później)',min:-300,max:300,krok:10,fab:0,ust:v=>mowa.wnetrze.cfg.przesun=v,fmt:v=>(v>0?'+':'')+v+' ms'},
+  {k:'przesun',n:'Przesunięcie ust (ms, + później)',min:-300,max:300,krok:10,fab:30,ust:v=>mowa.wnetrze.cfg.przesun=v,fmt:v=>(v>0?'+':'')+v+' ms'},
   {k:'otwarcie',n:'Siła otwierania ust',min:50,max:160,krok:5,fab:100,ust:v=>mowa.wnetrze.cfg.otwarcie=v/100,fmt:v=>v+'%'},
-  {k:'rozsun',n:'Szersze otwarcie (px)',min:0,max:12,krok:1,fab:0,ust:v=>mowa.wnetrze.cfg.rozsun=v,fmt:v=>v+' px'},
-  {k:'przenik',n:'Płynność przejść',min:0,max:60,krok:5,fab:20,ust:v=>mowa.wnetrze.cfg.przenik=v/100,fmt:v=>v+'%'},
-  {k:'wyglad',n:'Dopasowanie wyglądu (płynność)',min:0,max:200,krok:10,fab:100,ust:v=>mowa.wnetrze.cfg.wyglad=v/100,fmt:v=>(v/100).toFixed(1)},
-  {k:'skok',n:'Unikanie przeskoków',min:0,max:40,krok:2,fab:6,ust:v=>mowa.wnetrze.cfg.skok=v/100,fmt:v=>(v/100).toFixed(2)},
-  {k:'glowa',n:'Kiwanie głową',min:0,max:200,krok:10,fab:100,ust:v=>{ const H=mowa.wnetrze.head; H.__dy??=H.dyMax; H.__rot??=H.rot; H.dyMax=H.__dy*v/100; H.rot=H.__rot*v/100; },fmt:v=>v+'%'},
+  {k:'rozsun',n:'Szersze otwarcie (px)',min:0,max:12,krok:1,fab:4,ust:v=>mowa.wnetrze.cfg.rozsun=v,fmt:v=>v+' px'},
+  {k:'przenik',n:'Płynność przejść',min:0,max:60,krok:5,fab:40,ust:v=>mowa.wnetrze.cfg.przenik=v/100,fmt:v=>v+'%'},
+  {k:'wyglad',n:'Dopasowanie wyglądu (płynność)',min:0,max:200,krok:10,fab:160,ust:v=>mowa.wnetrze.cfg.wyglad=v/100,fmt:v=>(v/100).toFixed(1)},
+  {k:'skok',n:'Unikanie przeskoków',min:0,max:40,krok:2,fab:18,ust:v=>mowa.wnetrze.cfg.skok=v/100,fmt:v=>(v/100).toFixed(2)},
+  {k:'glowa',n:'Kiwanie głową',min:0,max:200,krok:10,fab:60,ust:v=>{ const H=mowa.wnetrze.head; H.__dy??=H.dyMax; H.__rot??=H.rot; H.dyMax=H.__dy*v/100; H.rot=H.__rot*v/100; },fmt:v=>v+'%'},
   {k:'brwi',n:'Ruch brwi',min:0,max:200,krok:10,fab:100,ust:v=>{ const H=mowa.wnetrze.head; H.__br??=H.brow; H.brow=H.__br*v/100; },fmt:v=>v+'%'},
   // obraz: ziarno filmowe na całej scenie (maskuje drobne różnice faktury ust i twarzy), wielkość ziarna, kolory
-  {k:'ziarno',n:'Ziarno filmowe',min:0,max:60,krok:1,fab:7,ust:v=>{ document.getElementById('grain').style.opacity=(v/100).toFixed(2); },fmt:v=>v+'%'},
+  {k:'ziarno',n:'Ziarno filmowe',min:0,max:60,krok:1,fab:9,ust:v=>{ document.getElementById('grain').style.opacity=(v/100).toFixed(2); },fmt:v=>v+'%'},
   {k:'ziarnoW',n:'Wielkość ziarna',min:1,max:4,krok:1,fab:1,ust:v=>{ const g=document.getElementById('grain'); g.style.backgroundSize=(160*v)+'px '+(160*v)+'px'; g.style.imageRendering=v>1?'pixelated':''; },fmt:v=>v+'×'},
-  {k:'kolor',n:'Kolory (nasycenie)',min:50,max:120,krok:5,fab:100,ust:v=>{ document.getElementById('cam').style.filter=v===100?'':`saturate(${v/100})`; },fmt:v=>v+'%'}
+  {k:'kolor',n:'Kolory (nasycenie)',min:50,max:120,krok:5,fab:110,ust:v=>{ document.getElementById('cam').style.filter=v===100?'':`saturate(${v/100})`; },fmt:v=>v+'%'}
 ];
 const mimika=Object.assign(Object.fromEntries(MIMIKA.map(m=>[m.k,m.fab])),store('egzo-mimika')||{});
 // wersja 2 ustawień: nowy dobór klatek — suwaki płynności wracają raz do nowych fabrycznych (ziarno, kolory itd. zostają)

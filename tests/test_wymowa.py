@@ -8,6 +8,7 @@ więc porównujemy słowa ze słowami.
 Kryteria: średni błąd znaków (CER) ≤ 12%, żadne zdanie > 35% (Whisper small sam myli się w kilku procentach,
 a model mowy ma losowość — pojedyncze zdanie bywa słabsze); tempo artykulacji 5,0–6,0 sylaby/s
 (naturalna polska mowa w rozmowie: ok. 5–6; przy tempie 1,0 było 6,0 i CER 13,7%, przy 0,9: 5,6 i 9,0%), z pauzami ≥ 4,0.
+Od 2026-10-28 tempo fabryczne 1,21 (wybór szefa, żywa rozmowa): 6,4 syl/s, CER 8,0% → górna granica tempa 7,0.
 Użycie: python3 tests/test_wymowa.py [URL] [KATALOG_MODELU_WHISPER]
 Model: https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-whisper-small.tar.bz2
 """
@@ -105,7 +106,7 @@ def main():
         if c > 0.03: print(f"        mówi:    {x['mow']}\n        słyszę:  {x['heard']}")
     m_cer, m_rate, m_all = float(np.mean(cers)), float(np.mean(rates)), float(np.mean(rates_all))
     print(f"\nśredni CER {m_cer*100:.1f}% | tempo artykulacji {m_rate:.2f} syl/s | z pauzami {m_all:.2f} syl/s")
-    ok &= m_cer <= 0.12 and 5.0 <= m_rate <= 6.0 and m_all >= 4.0
+    ok &= m_cer <= 0.12 and 5.0 <= m_rate <= 7.0 and m_all >= 4.0
     print('BŁĘDY STRONY:', errs); print('WYNIK:', 'OK' if ok else 'NIE ZALICZONY')
     json.dump(rows, open('/tmp/wynik_wymowa.json', 'w'), ensure_ascii=False, indent=1)
     sys.exit(0 if ok else 1)

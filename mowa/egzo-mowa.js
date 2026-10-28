@@ -407,7 +407,7 @@ const LIP_FPS=25;
 // spółgłoski między samogłoskami wyraźnie przymykają usta (pomiar: inaczej sylaby się zlewają)
 const OPEN_T={A:1,O:.85,E:.72,Y:.62,U:.55,I:.5,SH:.42,S:.28,L:.42,R:.42,TDN:.32,KG:.42,CH:.45,FV:.22,MBP:0};
 // strojenie doboru klatek (wyniki pomiarów: tests/test_realizm.py)
-const CFG={skok:.06, zostan:.03, roznica:.25, wygladz:0, przenik:.2, fala:true, rozsun:0, otwarcie:1, przesun:0, wyglad:1, wstecz:.05};   // wyglad 1 + skok .06: przeskoki tylko między podobnie wyglądającymi klatkami (migotanie p95 6,3 → 3,8; prawdziwa mowa 4,4)   // otwarcie: mnożnik celu ust; przesun: ms, dodatnie = usta później   // skok .16 (było .08): biblioteka z prawdziwej mowy — mniej przeskoków między niesąsiednimi klatkami (migotanie p95 6,8 → 6,0)
+const CFG={skok:.18, zostan:.03, roznica:.25, wygladz:0, przenik:.4, fala:true, rozsun:4, otwarcie:1, przesun:30, wyglad:1.6, wstecz:.05};   // ustawienia szefa z 2026-10-28 (Studio → Kopiuj ustawienia): płynne przejścia, lekko szersze usta, +30 ms   // wyglad 1 + skok .06: przeskoki tylko między podobnie wyglądającymi klatkami (migotanie p95 6,3 → 3,8; prawdziwa mowa 4,4)   // otwarcie: mnożnik celu ust; przesun: ms, dodatnie = usta później   // skok .16 (było .08): biblioteka z prawdziwej mowy — mniej przeskoków między niesąsiednimi klatkami (migotanie p95 6,8 → 6,0)
 function lipTargets(m,offset,total,pcm){
   const n=Math.max(1,Math.ceil(total*LIP_FPS)), tg=new Float32Array(n);
   const sr=m.sampleRate, hop=Math.round(sr/LIP_FPS), env=new Float32Array(n);
@@ -576,6 +576,7 @@ function utworz(opt){
   }
   function libChunks(text){
     if(!lib.idx||!lib.pcm||voice.neural!=='mai') return null;   // gotowe kwestie nagrane głosem Mai
+    if(Math.abs((voice.rate||1)-(lib.idx.tempo||.9))>.03) return null;   // nagrane w innym tempie niż ustawione — liczymy na żywo (bez skoków tempa w rozmowie)
     if(!lib.zd){ lib.zd=new Map(); for(const L of Object.values(lib.idx.lines)) for(const c of L) if(!lib.zd.has(c.text)) lib.zd.set(c.text,c); }
     // cała kwestia (tekst jak w stronie) albo jedno zdanie po zamianie na mowę (strumień czatu, raport)
     const L=lib.idx.lines[text]||(lib.zd.has(text)?[lib.zd.get(text)]:null); if(!L) return null;
