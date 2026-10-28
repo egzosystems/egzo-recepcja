@@ -39,7 +39,7 @@ for (t, kind), r in zip(ZD, res):
     def pauses(du):
         out = []
         for k, c in enumerate(ch):
-            if c in ',;:':
+            if c in ',;:' and any(x.isalpha() for x in ch[:k]):   # „, ” przed zdaniem (rozbieg modelu) jest obcinany z dźwięku
                 j = k + 1; L = du[k]
                 while j < len(ch) and ch[j] in '_ ': L += du[j]; j += 1
                 out.append(L * hop / sr)

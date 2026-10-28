@@ -1122,7 +1122,7 @@ function utworz(opt){
     if(neural.ready) return neural.ready;
     setState('loading');
     neural.ready=new Promise((res,rej)=>{
-      let w; try{ w=new Worker(o.bazaGlosu+'tts-worker.js'); }catch(e){ setState('failed'); rej(e); return; }
+      let w; try{ w=new Worker(o.bazaGlosu+'tts-worker.js?v='+o.wersjaDanych); }catch(e){ setState('failed'); rej(e); return; }
       neural.worker=w;
       w.onmessage=e=>{
         const m=e.data||{};
@@ -1137,7 +1137,10 @@ function utworz(opt){
     neural.ready.catch(()=>{ neural.ready=null; });
     return neural.ready;
   }
-  function synthNeural(text,ids){ const id=++neural.seq; if(ids) ids.push(id); return new Promise((res,rej)=>{ neural.pending.set(id,{res,rej}); neural.worker.postMessage({type:'speak',id,text,rate:voice.rate,noise:voice.szum,noiseW:voice.szumDl}); }); }
+  // „, ” przed zdaniem: model dostaje rozbieg i wyraźnie wymawia pierwsze słowo (pomiar Whisperem: 4/24 → 10–12/24
+  // rozpoznanych pierwszych słów, np. „Spotkanie” zamiast „Pokanie”); cichy początek i tak obcina trimSilence
+  const ROZBIEG=', ';
+  function synthNeural(text,ids){ const id=++neural.seq; if(ids) ids.push(id); return new Promise((res,rej)=>{ neural.pending.set(id,{res,rej}); neural.worker.postMessage({type:'speak',id,text:voice.neural==='mai'?ROZBIEG+text:text,rate:voice.rate,noise:voice.szum,noiseW:voice.szumDl}); }); }
   // łańcuch brzmienia: ciepły dół, przygaszona ostrość, delikatne „powietrze”, łagodna kompresja
   function voiceChain(ctx,dest){
     if(neural.chain&&!dest) return neural.chain;
@@ -1628,8 +1631,9 @@ function utworz(opt){
     c.globalAlpha=1; c.setTransform(1,0,0,1,0,0);
   }
   // zrzut nakładki tak, jak ją widać (płótno głowy z jego przekształceniem) — do testów i podglądu
-  function zrzutNakladki(ctx,sx,sy,w,h,dx,dy){
-    const hc=lip.hc; if(!hc) return; const G=hc.G;
+  // bezRuchu: bez przekształcenia ruchu głowy (ocena samych ust: ostrość kafelka bez przesunięcia o ułamek piksela)
+  function zrzutNakladki(ctx,sx,sy,w,h,dx,dy,bezRuchu){
+    const hc=lip.hc; if(!hc) return; const G=bezRuchu?[1,0,0,1,hc.R.x,hc.R.y]:hc.G;
     ctx.save(); ctx.beginPath(); ctx.rect(dx,dy,w,h); ctx.clip();
     ctx.setTransform(1,0,0,1,dx-sx,dy-sy); ctx.transform(G[0],G[1],G[2],G[3],G[4],G[5]); ctx.drawImage(hc.cv,0,0); ctx.restore();
   }
@@ -1701,7 +1705,7 @@ const mowa=EgzoMowa.utworz({
   bazaGlosu:VOICE_BASE, bazaUst:'lip/', canvas:document.getElementById('lipCanvas'),
   // usta rysujemy tylko na klipie, dla którego jest tor (dziś: pętla spoczynkowa)
   wideo:()=>({el:front, klip:front.style.opacity==='1'&&byId.idle.src&&front.src.endsWith(byId.idle.src)?'idle':null}),
-  czekajNaSpoczynek:ensureIdle, napis:subtitle, wersjaDanych:'2026-10-28-noc1', barwa:store('egzo-barwa')||'miekka'
+  czekajNaSpoczynek:ensureIdle, napis:subtitle, wersjaDanych:'2026-10-28-noc2', barwa:store('egzo-barwa')||'miekka'
 });
 { const s=document.getElementById('barwaSel'); s.innerHTML=Object.entries(mowa.barwy()).map(([k,n])=>`<option value="${k}">${n}</option>`).join(''); s.value=mowa.barwa;
   s.onchange=()=>{ mowa.ustaw({barwa:s.value}); store('egzo-barwa',s.value); if(mowa.wlaczona) say('Tak teraz brzmię, szefie.'); }; }
@@ -1732,7 +1736,7 @@ voiceBtn.onclick=async()=>{
   voiceBtn.setAttribute('aria-pressed',true); voiceBtn.textContent='Ładuję głos…';
   const {biblioteka,model}=await mowa.wlacz();   // kontekst audio tworzony w kliknięciu — odblokowuje dźwięk na telefonach
   if(!mowa.wlaczona) return;
-  const powitaj=()=>{ if(!busy.v){ queue=[]; greetWithVoice(); } else say('Głos włączony.'); if(!raportDzisJuz()) setTimeout(raportPowiedz,400); };
+  const powitaj=()=>{ if(!busy.v){ queue=[]; greetWithVoice(); } else say('Głos włączony.'); if(!raportDzisJuz()) setTimeout(()=>raportPowiedz(true),400); };
   if(biblioteka){ if(mowa.stan==='ready') voiceBtn.textContent='Głos włączony'; powitaj(); }
   try{ await model; }
   catch(e){ if(!biblioteka){ if(mowa.naSystem()) loadVoices(); else { noVoice('Nie udało się wczytać głosu: '+(e.message||e)); return; } } }
@@ -1943,7 +1947,7 @@ function renderZad(){
   for(const z of [...otw,...zr]){
     const li=document.createElement('li'); li.className='zad'+(z.zrobione?' done':'')+(!z.zrobione&&z.termin&&z.termin<dz?' late':'');
     const cb=document.createElement('input'); cb.type='checkbox'; cb.checked=!!z.zrobione; cb.setAttribute('aria-label','Zrobione: '+z.tresc);
-    cb.onchange=()=>{ zadOdhacz(z,cb.checked); if(cb.checked&&mowa.wlaczona&&!mowa.zajeta&&!busy.v&&!chatBusy) say(pick(['Odhaczone, szefie.','Świetnie, jedno mniej.','Zrobione, odhaczam.'])); };
+    cb.onchange=()=>{ zadOdhacz(z,cb.checked); if(cb.checked&&mowa.wlaczona&&!mowa.zajeta&&!busy.v&&!chatBusy) say(pick(['Zrobione, szefie.','Świetnie, jedno mniej.','Jedno zadanie mniej, szefie.'])); };
     const sp=document.createElement('span'); sp.textContent=z.tresc;
     const info=[z.termin?terminPL(z.termin):'',z.zrodlo?'z: '+z.zrodlo:''].filter(Boolean).join(' · ');
     if(info){ const s=document.createElement('small'); s.textContent=info; sp.appendChild(s); }
@@ -1977,16 +1981,20 @@ async function raportDnia(){
   const akc=docs.filter(d=>!d.ex&&d.s==='DO AKCEPTACJI'), now_=docs.filter(d=>!d.ex&&(d.s==='NOWE'||d.s==='W TRAKCIE'));
   if(akc.length) czesc.push(`${akc.length} ${PLn(akc.length,'dokument czeka','dokumenty czekają','dokumentów czeka')} na twoją akceptację.`);
   if(now_.length) czesc.push(`${now_.length} ${PLn(now_.length,'dokument jest','dokumenty są','dokumentów jest')} jeszcze w obiegu.`);
+  const pusto=czesc.length===1||(czesc.length===2&&maile&&!maile.length);
   if(czesc.length===1) czesc.push('Nic pilnego nie czeka. Spokojny start.');
   czesc.push(pick(['Od czego zaczynamy?','Czym się zajmujemy najpierw?','Daj znać, od czego zacząć.']));
+  raportDnia.pusto=pusto;
   return czesc.join(' ');
 }
-async function raportPowiedz(){
+// sam (przy pierwszym włączeniu głosu w ciągu dnia) — tylko gdy jest o czym mówić; przyciskiem — zawsze
+async function raportPowiedz(sam){
   store('egzo-raport',dzien());
-  const t=await raportDnia(); addMsg('her',t); logEvent('Raport dnia');
+  const t=await raportDnia(); if(sam&&raportDnia.pusto) return;
+  addMsg('her',t); logEvent('Raport dnia');
   if(mowa.wlaczona) announce(t,'Raport dnia'); else { subtitle(t); subTimer=setTimeout(()=>subtitle(''),Math.max(6000,t.length*70)); }
 }
-document.getElementById('raportBtn').onclick=()=>raportPowiedz();
+document.getElementById('raportBtn').onclick=()=>raportPowiedz(false);
 const raportDzisJuz=()=>store('egzo-raport')===dzien();
 
 /* ---------- Szkice odpowiedzi na zapytania (samodzielnie, nigdy nie wysyła) ----------
@@ -2312,6 +2320,7 @@ const mail={mcp:null,state:'off',seen:new Map(),recent:[],unwatch:null,czytane:n
 // adres nadawcy: ostatni <…> w nagłówku (nazwa wyświetlana może zawierać udawany adres)
 function adresZ(sender){ const s=String(sender||''); const br=[...s.matchAll(/<([^<>\s]+@[^<>\s]+)>/g)]; if(br.length) return br[br.length-1][1].trim().toLowerCase();
   const pl=s.match(/[\w.+-]+@[\w-]+(?:\.[\w-]+)+/g); return pl?pl[pl.length-1].toLowerCase():''; }
+const WLASNE=/^(biuro@egzosystems\.com)$/i;   // adresy szefa — jego własnych wiadomości nie ogłaszamy
 const tematMowa=s=>String(s||'').replace(/^\s*((re|fw|fwd|odp|pd|aw|wg|tr)\s*(\[\d+\])?\s*:\s*)+/i,'').trim()||'bez tematu';
 const MAIL_Q={query:'in:inbox newer_than:2d',pageSize:20,view:'THREAD_VIEW_MINIMAL'};
 const mailBtn=document.getElementById('mailBtn'), mailNote=document.getElementById('mailNote');
@@ -2331,6 +2340,7 @@ function mailSeen(threads,announceNew){
     mail.seen.set(t.id,n);
     if(!announceNew) continue;
     const subj=tematMowa(m.subject).slice(0,90);
+    if(prev===undefined&&WLASNE.test(adresZ(m.sender))) continue;   // wiadomość od samego szefa (np. do siebie)
     if(prev===undefined){
       mail.recent.unshift({id:t.id,od:m.sender||'',temat:subj,fragment:String(m.snippet||'').slice(0,240)}); mail.recent=mail.recent.slice(0,6);
       announce(pick([`Szefie, przyszedł nowy e-mail. Pisze ${who(m.sender)}, temat: ${subj}.`,`Masz nową wiadomość, szefie. Nadawca: ${who(m.sender)}, temat: ${subj}.`]),'Nowy e-mail');

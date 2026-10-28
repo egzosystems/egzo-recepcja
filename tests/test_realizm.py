@@ -27,7 +27,7 @@ CFG = json.loads(os.environ.get('MOWA_CFG', '{}'))   # strojenie (np. {"skok": .
 TEKST = 'Dzień dobry. Właśnie przyszła paczka z nowym zamówieniem na terrarium. Mam ją otworzyć, czy wolisz poczekać do jutra?'
 
 SETUP = """()=>{ const W=mowa.wnetrze, L=W.lip, ctx=W.neural.ctx;
-  window.__an=ctx.createAnalyser(); __an.fftSize=512; W.neural.chain.connect(__an); window.__buf=new Float32Array(512);
+  window.__an=ctx.createAnalyser(); __an.fftSize=512; (W.neural.chain||W.voiceChain(ctx)).connect(__an); window.__buf=new Float32Array(512);
   const cv=document.createElement('canvas'); cv.width=150; cv.height=120; window.__cx=cv.getContext('2d',{willReadFrequently:true});
   // pierścień skóry wokół ust (strefa przejścia nakładki) i obszar warg
   const ring=[], lips=[];
@@ -35,8 +35,8 @@ SETUP = """()=>{ const W=mowa.wnetrze, L=W.lip, ctx=W.neural.ctx;
     if(l<1) lips.push(y*150+x); else if(e>.5&&e<1.05) ring.push(y*150+x); }
   window.__ring=ring; window.__lips=lips; }"""
 REC = """()=>{ window.__rec=[]; let prevC=null, prevR=null; const W=mowa.wnetrze, L=W.lip, ctx=W.neural.ctx;
-  const grab=(withLip,tr)=>{ const x=__cx, v=front, cx=Math.round(tr[0]), cy=Math.round(tr[1]);
-    x.drawImage(v,cx-75,cy-60,150,120,0,0,150,120); if(withLip) mowa.wnetrze.zrzutNakladki(x,cx-75,cy-60,150,120,0,0);
+  const grab=(withLip,tr,bezRuchu)=>{ const x=__cx, v=front, cx=Math.round(tr[0]), cy=Math.round(tr[1]);
+    x.drawImage(v,cx-75,cy-60,150,120,0,0,150,120); if(withLip) mowa.wnetrze.zrzutNakladki(x,cx-75,cy-60,150,120,0,0,bezRuchu);
     const d=x.getImageData(0,0,150,120).data, g=new Float32Array(150*120); for(let i=0;i<g.length;i++) g[i]=.3*d[i*4]+.59*d[i*4+1]+.11*d[i*4+2]; return g; };
   const md=(a,b,idx)=>{ let s=0; for(const i of idx) s+=Math.abs(a[i]-b[i]); return s/idx.length; };
   const loop=()=>{ __an.getFloatTimeDomainData(__buf); let r=0; for(const s of __buf) r+=s*s; r=Math.sqrt(r/__buf.length);
@@ -45,7 +45,8 @@ REC = """()=>{ window.__rec=[]; let prevC=null, prevR=null; const W=mowa.wnetrze
       if(prevC){ row.dc=md(C,prevC,__ring); row.dr=md(R,prevR,__ring); row.dlc=md(C,prevC,__lips); }
       // ostrość warg (wariancja laplasjanu) — nakładka vs wideo
       const lap=g=>{ let s=0,s2=0,n=0; for(const i of __lips){ const v=4*g[i]-g[i-1]-g[i+1]-g[i-150]-g[i+150]; s+=v; s2+=v*v; n++; } return s2/n-(s/n)**2; };
-      row.sc=lap(C); row.sr=lap(R); row.ff=L.ffLast||0;
+      // ostrość ust bez ruchu głowy (ruch głowy to zamierzone przesunięcie o ułamek piksela — każde przeliczenie obrazu je zmiękcza)
+      row.sc=lap(grab(true,tr,true)); row.sr=lap(R); row.ff=L.ffLast||0;
       prevC=C; prevR=R; } else { prevC=prevR=null; }
     __rec.push(row); if(mowa.zajeta||__rec.length<10) requestAnimationFrame(loop); };
   requestAnimationFrame(loop); }"""

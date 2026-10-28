@@ -105,6 +105,9 @@ EgzoMowa.mowione('12,5%')   // tekst w postaci do czytania na głos
    artykulacji i 13,7% błędów rozpoznania; **0,9 = 5,6 sylaby/s i 9,0%** — domyślne. Gotowe kwestie nagrywane tym samym
    tempem, każde zdanie w 4 wersjach, zostaje ta, którą Whisper zrozumiał najlepiej (`tools/generuj_frazy.py`).
    Kwestie są wyszukiwane także po pojedynczych zdaniach po zamianie na mowę (raport dnia, strumień czatu).
+   **Rozbieg**: model zjadał początek pierwszego słowa zdania („Spotkanie” → „Pokanie”, „Termin” → „Tarmin”) — do
+   syntezy idzie „, ” + zdanie; pierwsze słowo rozpoznane w 10–12 z 24 prób zamiast 4 z 24. Cichy rozbieg obcina
+   `trimSilence`, więc nie słychać go i nie opóźnia mowy (test `tests/test_glos.py` pomija ten przecinek).
 13. **Twarz na osobnym płótnie.** Głowa, brwi, żuchwa i usta rysowane są na małym płótnie nad głową, bez ruchu głowy;
    kiwnięcie i kołysanie robi przekształcenie CSS tego płótna (kompozytor). Przerysowanie tylko przy zmianie (nowa klatka
    wideo, usta, żuchwa, brwi), klatka wideo pobierana raz na przerysowanie (to najdroższa operacja). Słabe urządzenie

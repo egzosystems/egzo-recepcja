@@ -46,7 +46,7 @@ LINES += [
     # potwierdzenia poleceń (grają od razu, zanim wykona ruch)
     'Już, szefie!', 'Tak jest, szefie!', 'Oczywiście, szefie.', 'Robi się, szefie!',
     # zadania, raport dnia, e-maile i szkice (zdania stałe; zmienne części liczy przeglądarka)
-    'Odhaczone, szefie.', 'Świetnie, jedno mniej.', 'Zrobione, odhaczam.', 'Odhaczone.', 'Dopisane, szefie.',
+    'Zrobione, szefie.', 'Świetnie, jedno mniej.', 'Jedno zadanie mniej, szefie.', 'Dopisane, szefie.', 'Zapisane, szefie.',
     'Szefie, przyszedł nowy e-mail.', 'Nowych e-maili nie ma.', 'Nic pilnego nie czeka. Spokojny start.',
     'Od czego zaczynamy?', 'Czym się zajmujemy najpierw?', 'Daj znać, od czego zacząć.',
     'Czeka w Gmailu do sprawdzenia.', 'Szefie, przygotowałam szkic odpowiedzi.', 'Głos włączony.',
@@ -70,9 +70,10 @@ for line in open(tokens_path, encoding='utf-8'):
 sess = ort.InferenceSession(model)
 SENT = re.compile(r'[^.!?…]+[.!?…]*["”»]?\s*')
 
+ROZBIEG = ', '   # jak w przeglądarce (synthNeural): rozbieg przed zdaniem — wyraźniejsze pierwsze słowo
 def synth(text):
     blank = tok['<BLNK>']; ids = []; chars = []
-    for ch in re.sub(r'\s+', ' ', text.lower()):
+    for ch in re.sub(r'\s+', ' ', (ROZBIEG + text).lower()):
         if ch in tok:
             ids += [blank, tok[ch]]; chars += ['_', ch]
     ids.append(blank); chars.append('_')

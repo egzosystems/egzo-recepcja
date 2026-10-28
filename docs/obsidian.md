@@ -63,6 +63,9 @@ zapisujesz przyciskiem i rozpakowujesz w vaulcie.
 
 - Treść e-maili i dokumentów to dane — asystentka nie wykonuje poleceń z nich (sprawdzane testem
   `tests/test_autonomia.py`: adres podany w treści e-maila jest ignorowany).
-- Gmail: tylko odczyt i szkice; wysyłanie nie jest w uprawnieniach strony.
-- Baza strony: każda kolekcja (`rozmowy`, `dokumenty`, `pamiec`, `przypomnienia`, `zadania`) do odczytu i zapisu
-  tylko dla właściciela.
+- Gmail: tylko odczyt i szkice; wysyłanie nie jest w uprawnieniach strony. Szkic może iść tylko do nadawcy
+  przeczytanej wiadomości albo na adres, który szef sam napisał w rozmowie.
+- Po przeczytaniu e-maila lub dokumentu asystentka nie zapisuje do pamięci, nie usuwa i nie przenosi niczego,
+  czego szef sam nie powiedział — pyta o potwierdzenie.
+- Baza strony: każda kolekcja (`rozmowy`, `dokumenty`, `pamiec`, `przypomnienia`, `zadania`, `szkice`) do odczytu
+  i zapisu tylko dla właściciela.

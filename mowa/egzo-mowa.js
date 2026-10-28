@@ -520,7 +520,7 @@ function utworz(opt){
     if(neural.ready) return neural.ready;
     setState('loading');
     neural.ready=new Promise((res,rej)=>{
-      let w; try{ w=new Worker(o.bazaGlosu+'tts-worker.js'); }catch(e){ setState('failed'); rej(e); return; }
+      let w; try{ w=new Worker(o.bazaGlosu+'tts-worker.js?v='+o.wersjaDanych); }catch(e){ setState('failed'); rej(e); return; }
       neural.worker=w;
       w.onmessage=e=>{
         const m=e.data||{};
@@ -535,7 +535,10 @@ function utworz(opt){
     neural.ready.catch(()=>{ neural.ready=null; });
     return neural.ready;
   }
-  function synthNeural(text,ids){ const id=++neural.seq; if(ids) ids.push(id); return new Promise((res,rej)=>{ neural.pending.set(id,{res,rej}); neural.worker.postMessage({type:'speak',id,text,rate:voice.rate,noise:voice.szum,noiseW:voice.szumDl}); }); }
+  // „, ” przed zdaniem: model dostaje rozbieg i wyraźnie wymawia pierwsze słowo (pomiar Whisperem: 4/24 → 10–12/24
+  // rozpoznanych pierwszych słów, np. „Spotkanie” zamiast „Pokanie”); cichy początek i tak obcina trimSilence
+  const ROZBIEG=', ';
+  function synthNeural(text,ids){ const id=++neural.seq; if(ids) ids.push(id); return new Promise((res,rej)=>{ neural.pending.set(id,{res,rej}); neural.worker.postMessage({type:'speak',id,text:voice.neural==='mai'?ROZBIEG+text:text,rate:voice.rate,noise:voice.szum,noiseW:voice.szumDl}); }); }
   // łańcuch brzmienia: ciepły dół, przygaszona ostrość, delikatne „powietrze”, łagodna kompresja
   function voiceChain(ctx,dest){
     if(neural.chain&&!dest) return neural.chain;
@@ -1026,8 +1029,9 @@ function utworz(opt){
     c.globalAlpha=1; c.setTransform(1,0,0,1,0,0);
   }
   // zrzut nakładki tak, jak ją widać (płótno głowy z jego przekształceniem) — do testów i podglądu
-  function zrzutNakladki(ctx,sx,sy,w,h,dx,dy){
-    const hc=lip.hc; if(!hc) return; const G=hc.G;
+  // bezRuchu: bez przekształcenia ruchu głowy (ocena samych ust: ostrość kafelka bez przesunięcia o ułamek piksela)
+  function zrzutNakladki(ctx,sx,sy,w,h,dx,dy,bezRuchu){
+    const hc=lip.hc; if(!hc) return; const G=bezRuchu?[1,0,0,1,hc.R.x,hc.R.y]:hc.G;
     ctx.save(); ctx.beginPath(); ctx.rect(dx,dy,w,h); ctx.clip();
     ctx.setTransform(1,0,0,1,dx-sx,dy-sy); ctx.transform(G[0],G[1],G[2],G[3],G[4],G[5]); ctx.drawImage(hc.cv,0,0); ctx.restore();
   }

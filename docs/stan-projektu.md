@@ -182,7 +182,9 @@ Nowy test `tests/test_realizm.py` mierzy na tym, co faktycznie słychać i wida�
 - **Szkice odpowiedzi na zapytania** (domyślnie włączone, wyłącznik): nowy e-mail → ocena przez Claude → szkic w Gmailu do nadawcy z nagłówka; nigdy nie wysyła; limity 6/h i 30/doba; pomija noreply, newslettery i własną domenę; adres z treści e-maila ignorowany (test).
 - **Dokumenty w rozmowie**: `szukaj_w_dokumentach`, `czytaj_dokument`, `przenies_dokument` (np. „zaakceptuj fakturę”).
 - **Obsidian**: paczka ZIP (dokumenty, rozmowy, zadania w formacie Tasks, pamięć, przypomnienia, pulpit Dataview) — `docs/obsidian.md` (też osadzenie strony w Obsidianie przez Custom Frames).
-- Testy: `tests/test_autonomia.py` (28 sprawdzeń) i cały dotychczasowy zestaw — `tests/uruchom_wszystkie.sh`.
+- **Niezależny przegląd kodu** (osobny agent) i poprawki: szkic odpowiedzi tylko do nadawcy przeczytanej wiadomości albo na adres podany przez szefa (adres z treści e-maila odrzucany); po przeczytaniu e-maila/dokumentu zmiany w pamięci, zadaniach i dokumentach tylko, gdy treść pochodzi od szefa; usuwanie/odhaczanie po jednym trafieniu; adres nadawcy z ostatniego `<…>`; komunikat o szkicu stały (nie słowa modelu); jeden szkic przy kilku otwartych urządzeniach (zajęcie w bazie `szkice`); własna odpowiedź szefa w wątku nie jest ogłaszana; usunięte zadania nie wracają z innego urządzenia; najnowsze przypomnienia i fakty zawsze wczytane; strumień czatu nie gubi końcówki; daty „jutro/wczoraj” odporne na zmianę czasu; paczka do Obsidiana obejmuje wszystkie dokumenty, nazwy plików stałe; kilkadziesiąt poprawek czytania (zakresy, kody pocztowe, NIP, narzędnik, półtorej, „na 9:00”, domeny).
+- **„Szefie”** brzmiało niewyraźnie (Whisper: „szafie”, 3/18) — do syntezy idzie „szeefie” (13/18). Gotowe kwestie nagrane od nowa: 5 wersji każdego zdania, wybrana najlepiej rozumiana (średni błąd 9,4%).
+- Testy: `tests/test_autonomia.py` (40 sprawdzeń), `tests/test_normalizacja.js` (88), `tests/test_wymowa.py` i cały dotychczasowy zestaw — `tests/uruchom_wszystkie.sh`.
 
 ## Plan
 1. Ujęcia obiegu## Plan
