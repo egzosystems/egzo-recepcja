@@ -407,7 +407,7 @@ const LIP_FPS=25;
 // spółgłoski między samogłoskami wyraźnie przymykają usta (pomiar: inaczej sylaby się zlewają)
 const OPEN_T={A:1,O:.85,E:.72,Y:.62,U:.55,I:.5,SH:.42,S:.28,L:.42,R:.42,TDN:.32,KG:.42,CH:.45,FV:.22,MBP:0};
 // strojenie doboru klatek (wyniki pomiarów: tests/test_realizm.py)
-const CFG={skok:.16, zostan:.03, roznica:.25, wygladz:0, przenik:.2, fala:true, rozsun:6, otwarcie:1, przesun:0};   // otwarcie: mnożnik celu ust; przesun: ms, dodatnie = usta później   // skok .16 (było .08): biblioteka z prawdziwej mowy — mniej przeskoków między niesąsiednimi klatkami (migotanie p95 6,8 → 6,0)
+const CFG={skok:.06, zostan:.03, roznica:.25, wygladz:0, przenik:.2, fala:true, rozsun:0, otwarcie:1, przesun:0, wyglad:1, wstecz:.05};   // wyglad 1 + skok .06: przeskoki tylko między podobnie wyglądającymi klatkami (migotanie p95 6,3 → 3,8; prawdziwa mowa 4,4)   // otwarcie: mnożnik celu ust; przesun: ms, dodatnie = usta później   // skok .16 (było .08): biblioteka z prawdziwej mowy — mniej przeskoków między niesąsiednimi klatkami (migotanie p95 6,8 → 6,0)
 function lipTargets(m,offset,total,pcm){
   const n=Math.max(1,Math.ceil(total*LIP_FPS)), tg=new Float32Array(n);
   const sr=m.sampleRate, hop=Math.round(sr/LIP_FPS), env=new Float32Array(n);
@@ -800,6 +800,18 @@ function utworz(opt){
       lip.D=Dm; lip.nL=nL; lip.K=k; lip.cand=cand; lip.clen=clen;
     }
     lip.lib=libj; lip.img=img;
+    // poprzednia klatka nagrania (odtwarzanie wstecz: zamykanie ust = otwieranie od tyłu)
+    lip.prev=new Int16Array(nE).fill(-1); for(let e=0;e<nE;e++){ const n=lip.next[e]; if(n>=0) lip.prev[n]=e; }
+    // podobieństwo wyglądu klatek (usta + broda): macierz nR×nR, 0..255 (128 ≈ typowa różnica), liczona porcjami
+    if(libj.opis&&libj.opisWH){ try{
+      const bin=atob(libj.opis), n=nR, w=libj.opisWH[0]*libj.opisWH[1], O=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++) O[i]=bin.charCodeAt(i);
+      if(O.length===n*w){ const D=new Float32Array(n*n); let tq=performance.now();
+        for(let a2=0;a2<n;a2++){ for(let b2=a2+1;b2<n;b2++){ let sum=0; const oa=a2*w, ob=b2*w; for(let k=0;k<w;k++){ const x=O[oa+k]-O[ob+k]; sum+=x<0?-x:x; } D[a2*n+b2]=D[b2*n+a2]=sum/w; }
+          if(performance.now()-tq>12){ await oddaj(); tq=performance.now(); } }
+        const smp=[]; for(let i=0;i<4000;i++){ const a3=(i*7919)%n, b3=(i*104729+13)%n; if(a3!==b3) smp.push(D[a3*n+b3]); } smp.sort((x,y)=>x-y);
+        const med=smp[smp.length>>1]||1, Q=new Uint8Array(n*n); for(let i=0;i<n*n;i++) Q[i]=Math.min(255,Math.round(128*D[i]/med));
+        lip.wyg=Q; lip.wygN=n; }
+    }catch(e){} }
     rozgrzej();
   }catch(e){ lip.img=null; } })();
   // rozgrzanie kompilatora JS: pierwsze wywołania doboru ust są kilkanaście razy wolniejsze — robimy je zawczasu, w tle
@@ -832,7 +844,31 @@ function utworz(opt){
   /* Dobór klatek ust (Viterbi). Koszt przejścia g→f: 0 dla kolejnej klatki nagrania, „zostań” dla tej samej,
      inaczej skok + różnica·|otwarcie(g) − otwarcie(f)|. Minimum po poprzednich klatkach liczone transformatą odległości
      (dwa przebiegi po klatkach posortowanych według otwarcia) — O(K) zamiast O(K²) na krok: ok. 10× szybciej. */
+  // dobór z kosztem WYGLĄDU (gdy biblioteka ma odciski): przejście g→f kosztuje 0 dla kolejnej klatki nagrania,
+  // CFG.wstecz dla poprzedniej (odtwarzanie wstecz), „zostań” dla tej samej, a inaczej skok + różnica otwarcia + CFG.wyglad·(różnica wyglądu).
+  // Przeskoki wybierane są tak, żeby ich nie było widać. O(T·K²) z tablicą podobieństw — ok. 1–2 ms na krok.
+  function lipSelectWyg(tg,js){
+    const T=tg.length, open=lip.open, nx=lip.next, pv=lip.prev, et=lip.etile, Q=lip.wyg, n=lip.wygN, wt=tg.wt||new Float32Array(T).fill(1);
+    const S=CFG.skok, Z=CFG.zostan, A=CFG.roznica, W=CFG.wyglad, B=CFG.wstecz;
+    const pose=!!(lip.cand&&js), k=pose?lip.K:0;
+    if(!pose){ if(!lip.allReal) lip.allReal=Int16Array.from({length:open.length},(_,i)=>i).filter(e=>lip.real[e]); }
+    const setAt=t=>pose?lip.cand.subarray(js[t]*k,js[t]*k+lip.clen[js[t]]):lip.allReal, K=pose?k:lip.allReal.length;
+    const states=new Int16Array(T*K), back=new Int16Array(T*K); let prev=setAt(0), cost=new Float64Array(K), nc=new Float64Array(K); states.set(prev,0);
+    for(let q=0;q<prev.length;q++){ const f=prev[q]; cost[q]=wt[0]*Math.abs(open[f]-tg[0])+(pose?poseCost(f,js[0]):0); }
+    for(let t=1;t<T;t++){ const cur=setAt(t); states.set(cur,t*K);
+      for(let q=0;q<cur.length;q++){ const f=cur[q], tf=et[f], of=open[f]; let best=1e18, bi=0;
+        for(let r=0;r<prev.length;r++){ const g=prev[r]; let c=cost[r];
+          if(nx[g]===f){} else if(g===f) c+=Z; else if(pv[g]===f) c+=B;
+          else { const tg2=et[g]; c+=S+A*Math.abs(open[g]-of)+(tg2<n&&tf<n?W*Q[tg2*n+tf]/128:W); }
+          if(c<best){ best=c; bi=r; } }
+        nc[q]=best+wt[t]*Math.abs(of-tg[t])+(pose?poseCost(f,js[t]):0); back[t*K+q]=bi; }
+      const x=cost; cost=nc; nc=x; prev=cur; }
+    let q=0; for(let r=1;r<prev.length;r++) if(cost[r]<cost[q]) q=r;
+    const out=new Int16Array(T); for(let t=T-1;t>=0;t--){ out[t]=states[t*K+q]; q=back[t*K+q]; }
+    return out;
+  }
   function lipSelect(tg,js){
+    if(lip.wyg&&CFG.wyglad>0&&lip.cand&&js) return lipSelectWyg(tg,js);
     const S=CFG.skok, Z=CFG.zostan, A=CFG.roznica;
     if(Z>S) return lipSelectRef(tg,js);
     const T=tg.length, open=lip.open, nx=lip.next, nE=open.length, wt=tg.wt||new Float32Array(T).fill(1);
@@ -1060,7 +1096,7 @@ function utworz(opt){
     const jawT=usta&&!(lip.lib&&lip.lib.broda)?Math.max(-1,Math.min(1,oNow-vo))*JAW_PX*lip.alpha:0;
     lip.jaw+=(jawT-lip.jaw)*JAW_K;
     // przejście: klatki kolejne w nagraniu — twardo jak w wideo (24 kl/s); skok — krótkie przenikanie na końcu kroku
-    let fx=0; if(fb!==fa){ const nat=lip.next[fa]===fb; fx=nat?(ff>=.5?1:0):Math.min(1,Math.max(0,(ff-(1-CFG.przenik))/CFG.przenik)); fx=fx*fx*(3-2*fx); }
+    let fx=0; if(fb!==fa){ const nat=lip.next[fa]===fb||lip.next[fb]===fa; fx=nat?(ff>=.5?1:0):Math.min(1,Math.max(0,(ff-(1-CFG.przenik))/CFG.przenik)); fx=fx*fx*(3-2*fx); }   // nat: sąsiednie klatki nagrania (także wstecz) — przejście jak w wideo
     if(fx>=.999){ fa=fb; fx=0; }
     lip.cur=fa; lip.ffLast=fx; lip.fbLast=fb;
     // pobranie klatki wideo (głowa, żuchwa, brwi) — najdroższa operacja; na wolnym urządzeniu co druga klatka wideo

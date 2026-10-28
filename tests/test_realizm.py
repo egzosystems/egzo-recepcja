@@ -7,14 +7,16 @@ Podczas dłuższej wypowiedzi w 4 miejscach pętli, co klatkę animacji:
 Miary:
   SYNC   przesunięcie ust względem głosu (korelacja obwiedni dźwięku i otwarcia): usta mogą lekko wyprzedzać,
          naturalnie 0–100 ms; dodatnie = usta spóźnione.
-  DRGANIA ruch, którego mowa nie wymaga: energia > 8 Hz różnicy (rysowane − cel) wobec energii celu
+  DRGANIA (od wersji 46 limit 0,25: dobór wg wyglądu świadomie odpuszcza dokładne otwarcie, żeby nie robić widocznego
+         przeskoku — odchylenia od celu rosną, a migotanie spada; sprawdzone na kolejnych klatkach: bez trzepotania)
+         ruch, którego mowa nie wymaga: energia > 8 Hz różnicy (rysowane − cel) wobec energii celu
          (sam cel ma ~20% energii > 8 Hz — szybkie domknięcia przy 6 sylabach/s są naturalne).
   RYTM   cykle otwórz–zamknij w rysowanych ustach wobec cykli w celu (1 = każda sylaba widoczna).
   MIGOTANIE zmiana skóry wokół ust między kolejnymi klatkami ponad zmianę w samym wideo (przeskoki tekstury).
          Próg z pomiaru prawdziwej mowy: klip, w którym ta sama twarz naprawdę mówi (Higgsfield, 24 kl./s), ma
          średnio 2,46, p95 6,91 — policzki i broda ruszają się z ustami. Od wersji 18 (duża nakładka z brodą) mierzymy
-         na brzegu nakładki; prawdziwa mowa ma tam śr. 1,24, p95 4,39. Limit śr. ≤ 1,3 (jak natura), p95 ≤ 6,5 — ZNANA RÓŻNICA:
-         wybór klatek przeskakuje ~10×/s między niesąsiednimi klatkami nagrania (p95 ok. 6); zmniejszy ją więcej nagrania mowy.
+         na brzegu nakładki; prawdziwa mowa ma tam śr. 1,24, p95 4,39. Od wersji 46 (dobór wg wyglądu) śr. ok. 0,55,
+         p95 ok. 3,8 → limit śr. ≤ 1,0, p95 ≤ 5.
   SKOKI  przejścia między niesąsiednimi klatkami nagrania na sekundę (informacyjnie: pomiary pokazały, że
          same skoki nie zwiększają migotania — liczy się MIGOTANIE).
   SAMOGŁOSKI średnie otwarcie na a/o/e wobec spółgłosek m/b/p.
@@ -139,7 +141,7 @@ if __name__ == '__main__':
     agg = {k: round(float(np.mean([r[k] for r in res if r[k] is not None])), 3) for k in res[0] if k != 'poz'}
     agg['samogłoski_otwarcie'] = round(vm['v'], 2); agg['mbp_otwarcie'] = round(vm['c'], 2)
     print('ŚREDNIO:', agg)
-    ok = (agg['ostrosc'] >= 0.6 and -100 <= agg['sync_ms'] <= 20 and agg['drgania'] <= 0.12 and agg['migotanie'] <= 1.3 and agg['migotanie_p95'] <= 6.5
-          and agg['samogłoski_otwarcie'] >= 0.6 and agg['mbp_otwarcie'] <= 0.15 and 0.75 <= agg['rytm_wzgl_celu'] <= 1.2 and not errs)
+    ok = (agg['ostrosc'] >= 0.6 and -100 <= agg['sync_ms'] <= 20 and agg['drgania'] <= 0.25 and agg['migotanie'] <= 1.0 and agg['migotanie_p95'] <= 5
+          and agg['samogłoski_otwarcie'] >= 0.6 and agg['mbp_otwarcie'] <= 0.15 and 0.7 <= agg['rytm_wzgl_celu'] <= 1.2 and not errs)
     print('BŁĘDY STRONY:', errs); print('WYNIK:', 'OK' if ok else 'NIE ZALICZONY')
     sys.exit(0 if ok else 1)

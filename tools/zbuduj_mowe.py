@@ -283,6 +283,10 @@ SHARP_A, SHARP_S = 0.5, 0.8
 for f in frames:
     b = cv2.GaussianBlur(f['crop'].astype(np.float32), (0, 0), SHARP_S)
     f['crop'] = np.clip(f['crop'].astype(np.float32) * (1 + SHARP_A) - b * SHARP_A, 0, 255).astype(np.uint8)
+import base64
+_ox0, _ox1 = int(MX - X0 - 40), int(MX - X0 + 40); _oy0, _oy1 = int(MY - Y0 - 18), int(MY - Y0 + 34)
+opis = np.stack([cv2.resize(cv2.cvtColor(f['crop'][_oy0:_oy1, _ox0:_ox1], cv2.COLOR_BGR2GRAY), (20, 13), interpolation=cv2.INTER_AREA) for f in frames]).astype(np.uint8)
+opis_b64 = base64.b64encode(opis.tobytes()).decode()
 cols = 16; rows = (len(frames) + cols - 1) // cols
 grid = np.zeros((rows * TH, cols * TW, 4), np.uint8)
 for n, f in enumerate(frames):
@@ -293,6 +297,8 @@ json.dump({'tileW': TW, 'tileH': TH, 'x0': X0, 'y0': Y0, 'cols': cols, 'broda': 
            'frames': [{'src': f['src'], 'i': f['i'], 'open': round(f['fo'], 3), 'teeth': round(f['ft'], 3), **({'kopia': 1} if f.get('kopia') else {})} for f in frames],
            'poza': [[round(float(v), 2) for v in f['poza']] for f in frames],
            'next': nxt,
+           # odcisk wyglądu (usta + broda, 20×13 skali szarości) — strona woli przeskoki między podobnie wyglądającymi klatkami
+           'opis': opis_b64, 'opisWH': [20, 13],
            # klatki wirtualne: [kafelek, klatka_kotwicy, a,b,c,d,e,f (macierz w układzie kafelka), następna_wirtualna]
            'wirtualne': [[copy_of[v['k']], v['a'], *[round(float(x), 4) for x in (v['m'][0, 0], v['m'][1, 0], v['m'][0, 1], v['m'][1, 1], v['m'][0, 2], v['m'][1, 2])], vn] for v, vn in zip(virt, vnext)]}, open(os.path.join(out_dir, 'usta-klatki.json'), 'w'), separators=(',', ':'))
 print('biblioteka klatek:', len(frames), '| ciągi:', sum(1 for x in nxt if x >= 0), '| plik', os.path.getsize(os.path.join(out_dir, 'usta-klatki.webp')) // 1024, 'KB')
