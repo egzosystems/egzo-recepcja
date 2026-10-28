@@ -1901,7 +1901,7 @@ const mowa=EgzoMowa.utworz({
   bazaGlosu:VOICE_BASE, bazaUst:'lip/', canvas:document.getElementById('lipCanvas'),
   // usta rysujemy tylko na klipie, dla którego jest tor (dziś: pętla spoczynkowa)
   wideo:()=>({el:front, klip:front.style.opacity==='1'&&byId.idle.src&&front.src.endsWith(byId.idle.src)?'idle':null}),
-  czekajNaSpoczynek:ensureIdle, napis:subtitle, wersjaDanych:'2026-10-28-v47', barwa:store('egzo-barwa')||'ciepla', tempo:1.21, wysokosc:1.05
+  czekajNaSpoczynek:ensureIdle, napis:subtitle, wersjaDanych:'2026-10-28-v48', barwa:store('egzo-barwa')||'ciepla', tempo:1.21, wysokosc:1.05
 });
 { const s=document.getElementById('barwaSel'); s.innerHTML=Object.entries(mowa.barwy()).map(([k,n])=>`<option value="${k}">${n}</option>`).join(''); s.value=mowa.barwa;
   s.onchange=()=>{ mowa.ustaw({barwa:s.value}); store('egzo-barwa',s.value); if(mowa.wlaczona) say('Tak teraz brzmię, szefie.'); }; }
