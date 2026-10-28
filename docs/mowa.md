@@ -56,8 +56,9 @@ EgzoMowa.mowione('12,5%')   // tekst w postaci do czytania na głos
 
 1. **Głos.** Gotowe kwestie (`voice/frazy.wav` + `frazy.json`) grają natychmiast. Każdy inny tekst liczy
    model Mai (VITS) w osobnym wątku przeglądarki; model zwraca też czas każdej litery.
-2. **Bez dziur.** Dźwięk rusza dopiero, gdy cała wypowiedź jest policzona (przy długich odpowiedziach:
-   gdy jest ≥ 6 s zapasu). Zdania są układane na osi czasu karty dźwiękowej z pauzą 0,26 s po kropce
+2. **Bez dziur.** Dźwięk rusza, gdy cała wypowiedź jest policzona (przy długich odpowiedziach: gdy jest ≥ 6 s
+   zapasu) albo — gdy tekst jest już kompletny — gdy gotowego dźwięku starczy z zapasem na doliczenie reszty
+   (tempo liczenia mierzone na bieżąco; odpowiedź z czatu rusza ok. 0,9 s wcześniej, bez przerw między zdaniami). Zdania są układane na osi czasu karty dźwiękowej z pauzą 0,26 s po kropce
    i 0,32 s po pytajniku. Ciche brzegi każdego zdania są przycinane.
 3. **Usta.** Z czasów liter → głoski (dwuznaki, zmiękczenia) → docelowe otwarcie ust co 40 ms
    (m/b/p = zamknięte, a = najszerzej, głośniej = szerzej). Z biblioteki **prawdziwych klatek jej twarzy**

@@ -595,9 +595,12 @@ function utworz(opt){
       // zdanie, które jest gotową kwestią (np. „Już, szefie!”) — gra z biblioteki, bez liczenia
       const lc=libChunks(text);
       if(lc){ eng.ready.push(...lc.map(c=>({...c}))); flushSpeech(); continue; }
-      let m;
-      try{ m=await synthNeural(text,eng.ids); }catch(e){ continue; }
+      let m; eng.cur=text;
+      try{ m=await synthNeural(text,eng.ids); }catch(e){ eng.cur=''; continue; }
+      eng.cur='';
       if(tok!==eng.tok) break;
+      // tempo liczenia (sekundy liczenia na sekundę mowy) — do decyzji, kiedy można zacząć mówić
+      if(m.ms&&m.pcm.length){ const r=(m.ms/1000)/(m.pcm.length/m.sampleRate); eng.rtf=eng.rtf?eng.rtf*.6+r*.4:r; }
       m.text=text; eng.ready.push(m); flushSpeech();
     }
     if(tok===eng.tok){ eng.busy=false; flushSpeech(); speechDone(); }
@@ -605,8 +608,13 @@ function utworz(opt){
   function flushSpeech(){
     if(eng.hold){
       const buffered=eng.ready.reduce((a,m)=>a+m.pcm.length/m.sampleRate,0);
-      // start dopiero gdy wszystko gotowe (albo zapas ≥ 6 s mowy przy długich odpowiedziach)
-      if((!eng.open&&!eng.pend.length&&!eng.busy)||buffered>=6) eng.hold=false; else return;
+      // start dopiero gdy wszystko gotowe (albo zapas ≥ 6 s mowy przy długich odpowiedziach) — albo gdy tekst jest już
+      // kompletny, a gotowego dźwięku starczy z zapasem na doliczenie reszty (tempo liczenia mierzone na bieżąco)
+      let start=(!eng.open&&!eng.pend.length&&!eng.busy)||buffered>=6;
+      if(!start&&!eng.open&&eng.ready.length&&eng.rtf){
+        const reszta=eng.pend.reduce((a,t)=>a+t.length,0)+(eng.cur||'').length, mowaReszty=reszta/14;   // ~14 znaków na sekundę mowy
+        start=buffered>=mowaReszty*eng.rtf*1.4+.4; }
+      if(start) eng.hold=false; else return;
     }
     while(eng.ready.length) scheduleSpeech(eng.ready.shift());
     speechDone();
