@@ -286,25 +286,63 @@ byId.receive.marks=[[10.4,'Czyta'],[21.2,'Analizuje']]; byId.read.inClip='04'; b
 const ZPETLI=239/24;   // przedłużenia z Higgsfield zaczynają się po klatce 239 pętli (źródło: pierwsze 10 s pętli)
 const RUCHY_KAT={
   powitanie:{n:'wita się: uśmiech i gest dłonią',w:[['media/egzo-powitanie_2026-10-27_v3.mp4',0,'greet']],sama:1},
-  pomachaj:{n:'macha na powitanie',w:[['media/egzo-ruch-macha_2026-10-28.mp4']],sama:1},
+  pomachaj:{n:'macha na powitanie',w:[['media/egzo-ruch-macha_2026-10-28.mp4',0,0,239]],sama:1},
   czytanie:{n:'bierze kartkę i czyta ją',w:[['media/egzo-obieg-1_2026-10-27_v3.mp4',0,'receive']]},
-  wstan:{n:'wstaje, rozgląda się i siada z powrotem',w:[['media/egzo-ruch-wstaje_2026-10-28.mp4']],sama:1},
-  odwroc_sie:{n:'wstaje, odwraca się tyłem i zalotnie zerka przez ramię',w:[['media/egzo-ruch-odwraca-sie-2_2026-10-28.mp4'],['media/egzo-ruch-odwraca-sie_2026-10-28.mp4',1]]},
+  wstan:{n:'wstaje, rozgląda się i siada z powrotem',w:[['media/egzo-ruch-wstaje_2026-10-28.mp4',0,0,5]],sama:1},
+  odwroc_sie:{n:'wstaje, odwraca się tyłem i zalotnie zerka przez ramię',w:[['media/egzo-ruch-odwraca-sie-2_2026-10-28.mp4',0,0,474],['media/egzo-ruch-odwraca-sie_2026-10-28.mp4',1]]},
   pochyl_sie:{n:'pochyla się nad biurkiem w stronę szefa',w:[['media/egzo-ruch-pochyla-sie_2026-10-28.mp4',1]]},
   nogi_na_biurku:{n:'odchyla się i kładzie nogi na biurku',w:[['media/egzo-ruch-nogi-na-biurku_2026-10-28.mp4',1]]},
   podaj_kartke:{n:'odwraca się i podaje kartkę w stronę szefa',w:[['media/egzo-ruch-podaje-kartke_2026-10-28.mp4',1]]},
-  klaszcz:{n:'klaszcze z radości',w:[['media/egzo-ruch-klaszcze_2026-10-28.mp4'],['media/egzo-ruch-klaszcze-2_2026-10-28.mp4',0,0,66]]},
-  aaa:{n:'otwiera szeroko usta i mówi „Aaa”',w:[['media/egzo-ruch-aaa_2026-10-28.mp4'],['media/egzo-ruch-aaa-2_2026-10-28.mp4']]},
+  klaszcz:{n:'klaszcze z radości',w:[['media/egzo-ruch-klaszcze_2026-10-28.mp4',0,0,474],['media/egzo-ruch-klaszcze-2_2026-10-28.mp4',0,0,66]]},
+  aaa:{n:'otwiera szeroko usta i mówi przeciągle „Aaaa”',w:[],mowa:['Aaaaa!','Aaaaaaa!','Aaaa.']},
   przeciagnij_sie:{n:'przeciąga się na krześle',w:[['media/egzo-ruch-przeciaga-sie_2026-10-28.mp4',0,0,474]],sama:1}
 };
 // które pliki są w tej wersji strony (brakujące warianty są pomijane, ruch bez plików jest „niedostępny”)
-const PLIKI_RUCHOW=new Set(['media/egzo-powitanie_2026-10-27_v3.mp4','media/egzo-obieg-1_2026-10-27_v3.mp4','media/egzo-ruch-odwraca-sie_2026-10-28.mp4','media/egzo-ruch-pochyla-sie_2026-10-28.mp4','media/egzo-ruch-nogi-na-biurku_2026-10-28.mp4','media/egzo-ruch-podaje-kartke_2026-10-28.mp4','media/egzo-ruch-klaszcze-2_2026-10-28.mp4','media/egzo-ruch-przeciaga-sie_2026-10-28.mp4']);
+const PLIKI_RUCHOW=new Set(['media/egzo-powitanie_2026-10-27_v3.mp4','media/egzo-obieg-1_2026-10-27_v3.mp4','media/egzo-ruch-odwraca-sie_2026-10-28.mp4','media/egzo-ruch-pochyla-sie_2026-10-28.mp4','media/egzo-ruch-nogi-na-biurku_2026-10-28.mp4','media/egzo-ruch-podaje-kartke_2026-10-28.mp4','media/egzo-ruch-klaszcze-2_2026-10-28.mp4','media/egzo-ruch-przeciaga-sie_2026-10-28.mp4','media/egzo-ruch-klaszcze_2026-10-28.mp4','media/egzo-ruch-odwraca-sie-2_2026-10-28.mp4','media/egzo-ruch-wstaje_2026-10-28.mp4','media/egzo-ruch-macha_2026-10-28.mp4']);
 for(const [k,r] of Object.entries(RUCHY_KAT)){
-  r.ids=[];
+  r.ids=r.mowa?['mow:'+k]:[];
   r.w.forEach(([plik,miekko,istn,wyj],i)=>{ if(!PLIKI_RUCHOW.has(plik)) return;
     if(istn){ r.ids.push(istn); return; }
     const s={id:`ruch_${k}_${i}`,n:'Ruch: '+r.n,fx:.47,fy:.4,z:1.0,src:plik,miekko:!!miekko,ruch:1,act:r.n,...(miekko?{}:{zPetli:ZPETLI,petlaOd:(wyj??239)/24})};
     STATES.push(s); s.no=STATES.length; s.prompt=s.act; byId[s.id]=s; SAY[s.id]='Wykonuje polecenie'; FOCUS[s.id]=[.5,.45]; r.ids.push(s.id); });
+}
+// ruch-klip albo ruch mówiony („mow:aaa” — usta z biblioteki, przeciągłe „Aaaa”)
+async function wykonajRuch(id){
+  if(!id.startsWith('mow:')){
+    // ruch musi ruszyć w ciągu 8 s i skończyć się w czasie klipu + zapas; inaczej wracamy do pętli i mówimy prawdę
+    const p=play([id]); let ruszyl=false; const t0=performance.now();
+    while(performance.now()-t0<8000){ const v=[vA,vB].find(x=>x.style.opacity==='1'); if(cur.id===id&&v&&v.src.endsWith(byId[id].src)&&!v.paused){ ruszyl=true; break; } await new Promise(f=>setTimeout(f,100)); }
+    if(!ruszyl){ queue=[]; setState(byId.idle); console.warn('ruch nie ruszył:',id); return false; }
+    await Promise.race([p,new Promise(f=>setTimeout(f,40000))]); if(cur.id===id) setState(byId.idle); return true;
+  }
+  const r=RUCHY_KAT[id.slice(4)]; if(!r||typeof mowa==='undefined') return;
+  await ensureIdle(); mowa.powiedz(r.mowa[Math.floor(Math.random()*r.mowa.length)]);
+  for(let i=0;i<60&&!mowa.zajeta;i++) await new Promise(f=>setTimeout(f,50));
+  while(mowa.zajeta) await new Promise(f=>setTimeout(f,100));
+}
+// polecenia ruchu rozpoznawane w samej stronie (nie polegamy na tym, czy model wywoła narzędzie): kolejność jak w wiadomości
+const WZORCE_RUCHOW=[
+  ['wstan',/\bwsta(ń|n|nie|niesz|ńże)\b|\bpodnie(ś|s) się\b/],
+  ['odwroc_sie',/\b(odwr[óo]ć|obr[óo]ć) się\b|\bwypnij\b|\bod tyłu\b/],
+  ['klaszcz',/\b(za)?klaszcz\w*|\bbrawo\b|\boklaski\b/],
+  ['pomachaj',/\bpomach\w*|\bmachnij\b|\bpomachaj\b/],
+  ['przeciagnij_sie',/\bprzeciągnij\b|\bprzeciagnij\b/],
+  ['nogi_na_biurku',/\bnogi na biurk\w*/],
+  ['pochyl_sie',/\bpochyl\w*/],
+  ['podaj_kartke',/\bpodaj\b.{0,20}\bkart\w*/],
+  ['aaa',/\bpowiedz\s+a{2,}|\ba{3,}\b|\botw[óo]rz\b.{0,20}\b(buzi\w*|usta|buzię)/],
+  ['powitanie',/\bprzywitaj\b/],
+  ['czytanie',/\bpoczytaj\b/]
+];
+// \b w JS nie zna polskich liter (ń, ą…) — granica wyrazu liczona na literach Unicode
+const GR='(?:(?<=\\p{L})(?!\\p{L})|(?<!\\p{L})(?=\\p{L}))';
+const WZORCE_U=WZORCE_RUCHOW.map(([k,re])=>[k,new RegExp(re.source.replace(/\\b/g,GR),'u')]);
+function ruchyZTekstu(q){
+  const t=' '+String(q||'').toLowerCase()+' ', out=[];
+  for(const [k,re] of WZORCE_U){ const m=re.exec(t); if(!m||!RUCHY_KAT[k]||!RUCHY_KAT[k].ids.length) continue;
+    if(/(^|\s)nie\s+$/.test(t.slice(Math.max(0,m.index-5),m.index))) continue;   // „nie wstawaj”
+    out.push([m.index,k]); }
+  return out.sort((a,b)=>a[0]-b[0]).map(x=>x[1]).slice(0,4);
 }
 // losowy wariant, ale nie ten sam dwa razy z rzędu
 const ostatniWariant={};
@@ -323,9 +361,12 @@ function show(v,instant){
 }
 const once=(el,ev)=>new Promise(r=>el.addEventListener(ev,r,{once:true}));
 const frameWait=()=>new Promise(r=>requestAnimationFrame(r));
+// wczytanie i ustawienie klatki — zawsze z limitem czasu (wolna sieć w telefonie nie może zawiesić sceny ani czatu)
+const doCzasu=(p,ms)=>Promise.race([p,new Promise((_,rej)=>setTimeout(()=>rej(new Error('czas')),ms))]);
 async function ready(v,src,t){
-  if(!v.src.endsWith(src)){ v.src=src; await once(v,'loadedmetadata'); }
-  if(Math.abs(v.currentTime-t)>.01){ v.currentTime=t; await once(v,'seeked'); }
+  if(!v.src.endsWith(src)){ v.src=src; if(v.readyState<1) await doCzasu(once(v,'loadedmetadata'),10000); }
+  else if(v.readyState<1) await doCzasu(once(v,'loadedmetadata'),10000);
+  if(Math.abs(v.currentTime-t)>.01){ v.currentTime=t; await doCzasu(once(v,'seeked'),4000); }
 }
 async function setState(s,opts={}){
   const prev=cur, my=++tok; cur=s; if(!statusLock) setStatus(SAY[s.id]);
@@ -353,7 +394,8 @@ async function setState(s,opts={}){
     // pętla dochodzi do klatki, od której zaczyna się klip, w ciągu 2,5 s → czekamy i tniemy bez szwu; inaczej krótkie przenikanie
     const idle=front, dt=s.zPetli-idle.currentTime;
     if(dt>0&&dt<2.5){
-      while(my===tok && idle.currentTime<s.zPetli-.02 && idle.currentTime>=s.zPetli-2.6) await frameWait();
+      const koniec=performance.now()+(dt+.6)*1000;   // wideo w telefonie potrafi przystanąć — czekamy najwyżej tyle, ile trzeba
+      while(my===tok && performance.now()<koniec && idle.currentTime<s.zPetli-.02 && idle.currentTime>=s.zPetli-2.6) await frameWait();
       if(my!==tok) return;
       v.play().catch(()=>{}); await Promise.race([once(v,'playing'),new Promise(r=>setTimeout(r,400))]);
       if(my!==tok) return; show(v,true);
@@ -385,6 +427,8 @@ async function setState(s,opts={}){
     v.play().catch(()=>{}); show(v,false);
   }
   back=front; front=v;
+  // ruch-przedłużenie pętli: w trakcie klipu pętla czeka już ustawiona na klatce wyjścia — powrót bez zatrzymania obrazu
+  if(s.petlaOd!=null&&byId.idle.src){ const bk=back; bk.pause(); bk.loop=true; ready(bk,byId.idle.src,s.petlaOd).catch(()=>{}); }
   front.onended=()=>{ if(my===tok) next(); };
 }
 const idleWaiters=[];
@@ -1053,7 +1097,7 @@ const LIP_FPS=25;
 // spółgłoski między samogłoskami wyraźnie przymykają usta (pomiar: inaczej sylaby się zlewają)
 const OPEN_T={A:1,O:.85,E:.72,Y:.62,U:.55,I:.5,SH:.42,S:.28,L:.42,R:.42,TDN:.32,KG:.42,CH:.45,FV:.22,MBP:0};
 // strojenie doboru klatek (wyniki pomiarów: tests/test_realizm.py)
-const CFG={skok:.08, zostan:.03, roznica:.25, wygladz:0, przenik:.2, fala:true};
+const CFG={skok:.16, zostan:.03, roznica:.25, wygladz:0, przenik:.2, fala:true};   // skok .16 (było .08): biblioteka z prawdziwej mowy — mniej przeskoków między niesąsiednimi klatkami (migotanie p95 6,8 → 6,0)
 function lipTargets(m,offset,total,pcm){
   const n=Math.max(1,Math.ceil(total*LIP_FPS)), tg=new Float32Array(n);
   const sr=m.sampleRate, hop=Math.round(sr/LIP_FPS), env=new Float32Array(n);
@@ -1229,6 +1273,43 @@ function utworz(opt){
       return {pcm:f,dur:Float32Array.from(c.dur),chars:[...c.chars],hop:lib.idx.hop,sampleRate:lib.idx.sampleRate,pre:c.pre,text:c.text,ms:0}; });
   }
 
+
+  /* „Aaaa!” (np. na prośbę „otwórz szeroko buzię”): model mowy skraca powtórzone litery do ~0,4 s, a zwolnienie
+     całej syntezy psuje głos. Bierzemy naturalne „Aaa” i wydłużamy samą samogłoskę metodą WSOLA (nakładanie okien
+     z dopasowaniem przesunięcia — wysokość i barwa bez zmian); czasy głosek „a” rosną tak samo, więc usta
+     trzymają szerokie „a” przez cały dźwięk. */
+  const PRZECIAGNIJ=/^[\s,]*a{3,}[!.…\s]*$/i;
+  function wsola(seg,sr,target){
+    const N=Math.round(.03*sr), H=N>>1, tol=Math.round(.008*sr), win=new Float32Array(N);
+    for(let i=0;i<N;i++) win[i]=.5-.5*Math.cos(2*Math.PI*i/(N-1));
+    const out=new Float32Array(target+N), nrm=new Float32Array(target+N), rate=Math.max(0,(seg.length-N-2*tol))/Math.max(1,target-N);
+    let pin=0, prev=-1;
+    for(let o=0;o+N<=out.length;o+=H, pin+=H*rate){
+      const c=Math.floor(pin)+tol; let k=c;
+      if(prev>=0){ let best=-1e9; for(let d=-tol;d<=tol;d++){ const j=c+d; if(j<0||j+N>seg.length) continue; let v=0; for(let i=0;i<H;i++) v+=seg[j+i]*seg[prev+i]; if(v>best){ best=v; k=j; } } }
+      k=Math.min(Math.max(k,0),seg.length-N);
+      for(let i=0;i<N;i++){ out[o+i]+=seg[k+i]*win[i]; nrm[o+i]+=win[i]; }
+      prev=Math.min(k+H,seg.length-H);
+    }
+    const r=new Float32Array(target); for(let i=0;i<target;i++) r[i]=out[i]/Math.max(nrm[i],1e-3); return r;
+  }
+  function przeciagnijA(m,sek){
+    try{
+      const ch=m.chars||[], hop=m.hop||256, sr=m.sampleRate, d=m.dur; if(!d||!ch.length) return m;
+      let pos=0, s0=-1, s1=-1; const st=[];
+      for(let i=0;i<ch.length;i++){ st.push(pos); if(/a/i.test(ch[i])){ if(s0<0) s0=pos; s1=pos+d[i]*hop; } pos+=d[i]*hop; }
+      if(s0<0||s1-s0<.12*sr) return m;
+      const a=Math.round(s0+.25*(s1-s0)), b=Math.round(s0+.75*(s1-s0)), tgt=Math.round(sek*sr);
+      if(b>m.pcm.length||tgt<=b-a) return m;
+      const mid=wsola(m.pcm.subarray(a,b),sr,tgt), pcm=new Float32Array(m.pcm.length-(b-a)+tgt);
+      pcm.set(m.pcm.subarray(0,a),0); pcm.set(mid,a); pcm.set(m.pcm.subarray(b),a+tgt);
+      // dłuższe „a” w czasach głosek (klatki po hop próbek) — proporcjonalnie do ich długości
+      const dod=(tgt-(b-a))/hop, ia=ch.map((c,i)=>/a/i.test(c)?i:-1).filter(i=>i>=0), sumA=ia.reduce((x,i)=>x+d[i],0);
+      const dur=Float32Array.from(d); ia.forEach(i=>{ dur[i]=d[i]+dod*d[i]/sumA; });
+      return {...m,pcm,dur};
+    }catch(e){ return m; }
+  }
+
   /* ----- silnik mowy: dźwięk rusza, gdy cała wypowiedź gotowa; zdania na osi czasu karty dźwiękowej ----- */
   const eng={tok:0,pend:[],busy:false,ready:[],open:false,hold:true,endAt:0,last:'',live:0,waiters:[],stats:[],sources:[],ids:[]};
   function speechDone(){ if(!eng.open&&!eng.pend.length&&!eng.busy&&!eng.ready.length&&eng.live===0){ const w=eng.waiters.splice(0); w.forEach(f=>f()); } }
@@ -1247,6 +1328,7 @@ function utworz(opt){
       if(tok!==eng.tok) break;
       // tempo liczenia (sekundy liczenia na sekundę mowy) — do decyzji, kiedy można zacząć mówić
       if(m.ms&&m.pcm.length){ const r=(m.ms/1000)/(m.pcm.length/m.sampleRate); eng.rtf=eng.rtf?eng.rtf*.6+r*.4:r; }
+      if(PRZECIAGNIJ.test(text)) m=przeciagnijA(m,Math.min(2.4,.9+.18*(text.match(/a/gi)||[]).length));
       m.text=text; eng.ready.push(m); flushSpeech();
     }
     if(tok===eng.tok){ eng.busy=false; flushSpeech(); speechDone(); }
@@ -1345,7 +1427,7 @@ function utworz(opt){
      pozy byłyby krzywe (do 10°); przy bliskiej pozie błąd kąta < 1°. */
   const POSE_FREE=6, POSE_W=.03, POSE_MAX=16, K_CAND=64;
   // żuchwa: broda z wideo opuszcza się razem z otwieraniem ust (różnica otwarcia nakładka − wideo)
-  const JAW_PX=5, JAW_Y0=227, JAW_CHIN=268, JAW_K=.35;
+  const JAW_PX=5, JAW_Y0=227, JAW_CHIN=268, JAW_K=.28;   // .28: przy szerszej artykulacji (biblioteka z mówiącej pętli) skok brody między klatkami ≤ 2 px
   // głowa i brwi przy mówieniu (układ kadru bazowego): kiwnięcia z rytmu głośności, lekkie kołysanie, brwi przy pytaniach
   const HEAD={dyMax:2.6, rot:.0075, brow:1.6, pivot:[585,300], k:.3, gain:3.4};
   // płótna pomocnicze nakładki: rysowane procesorem (bez synchronizacji z kartą graficzną przy każdej warstwie)
@@ -1418,6 +1500,9 @@ function utworz(opt){
       for(let r=0;r<5;r++){ await oddaj(); const tg=lipTargets(m,0,total,pcm), js=lip.cand?Int16Array.from({length:tg.length},(_,i)=>(i*3)%lip.nL):null; lipSelect(tg,js); }
     }catch(e){}
   }
+  // opóźnienie wyjścia dźwięku (słuchawki Bluetooth: 150–300 ms, głośnik telefonu: 20–60 ms): currentTime karty dźwiękowej
+  // to chwila oddania próbek, a słychać je dopiero po outputLatency — usta muszą czekać tyle samo (inaczej wyprzedzają głos)
+  function opoznienieWyjscia(){ const c=neural.ctx; if(!c) return 0; const v=(c.outputLatency||0)+(c.baseLatency||0); return v>0&&v<.6?v:0; }
   const poseCost=(f,j)=>{ const d=lip.D[f*lip.nL+j]; return d>POSE_FREE?(d-POSE_FREE)*POSE_W:0; };
   // dokładny czas WYŚWIETLANEJ klatki wideo (requestVideoFrameCallback), inaczej currentTime
   function videoTime(v){
@@ -1428,7 +1513,7 @@ function utworz(opt){
   // które klatki pętli będą na ekranie w kolejnych krokach ust (od chwili `start` karty dźwiękowej)
   function predictFrames(start,n){
     const L=lip.nL, fps=lip.fps, dur=L/fps, w=o.wideo()||{}, now=neural.ctx.currentTime;
-    const base=(w.klip==='idle'&&w.el?videoTime(w.el):0)+(start-now);   // inna scena → pętla zacznie od początku
+    const base=(w.klip==='idle'&&w.el?videoTime(w.el):0)+(start-now)+opoznienieWyjscia();   // usta pokażą się dopiero, gdy dźwięk będzie słychać   // inna scena → pętla zacznie od początku
     const js=new Int16Array(n);
     for(let i=0;i<n;i++){ let tt=(base+(i+.5)/LIP_FPS)%dur; if(tt<0) tt+=dur; js[i]=Math.min(L-1,Math.floor(tt*fps)); }
     return js;
@@ -1616,7 +1701,7 @@ function utworz(opt){
     const w=o.wideo()||{}, v=w.el, track=w.klip&&lip.tory[w.klip];
     let speaking=false, fa=lip.closed, fb=lip.closed, ff=0, pj=-1;
     if(track&&lip.segs.length&&neural.ctx){
-      const x=lipFrameAt(ct+o.wyprzedzenie);   // obraz wyprzedza dźwięk o 40 ms
+      const x=lipFrameAt(ct+o.wyprzedzenie-opoznienieWyjscia());   // obraz wyprzedza dźwięk o 40 ms (licząc od chwili, gdy dźwięk naprawdę słychać)
       if(x&&x.a>=0){ speaking=true; fa=x.a; fb=x.b; ff=x.f; pj=x.j; lip.celNow=x.cel; }
       else if(lip.segs.some(s=>ct<s.t0+s.dur+.25)) speaking=true;
     }
@@ -1626,7 +1711,7 @@ function utworz(opt){
     if(!tr||tr[3]<.6) speaking=false;
     lip.alpha+=((speaking?1:0)-lip.alpha)*(speaking?.4:.15);
     // ruch głowy (sprężyna: płynne wejście i powrót po wypowiedzi)
-    const gh=(track&&w.klip==='idle'&&neural.ctx)?glowaAt(ct+o.wyprzedzenie):null;
+    const gh=(track&&w.klip==='idle'&&neural.ctx)?glowaAt(ct+o.wyprzedzenie-opoznienieWyjscia()):null;
     lip.hd+=((gh?gh.dy:0)-lip.hd)*HEAD.k; lip.hr+=((gh?gh.r:0)-lip.hr)*HEAD.k; lip.hb+=((gh?gh.b:0)-lip.hb)*HEAD.k;
     if(!tr||tr[3]<.6||w.klip!=='idle'){ lip.hd=lip.hr=lip.hb=0; }
     // pomiar płynności podczas mowy: gdy mimo trybu oszczędnego animacja ma < 32 kl/s, wyłącz ruch głowy (zostają usta, żuchwa, brwi)
@@ -1650,7 +1735,8 @@ function utworz(opt){
     }
     // żuchwa: docelowe opuszczenie brody = różnica otwarcia (nakładka − wideo), z bezwładnością mięśni
     const oNow=lip.open[fa]*(1-ff)+(fb>=0?lip.open[fb]:lip.open[fa])*ff, vo=lip.vopen&&w.klip==='idle'?lip.vopen[fi]:0;
-    const jawT=usta?Math.max(-1,Math.min(1,oNow-vo))*JAW_PX*lip.alpha:0;
+    // biblioteka z całą dolną częścią twarzy (broda z nagrania mowy): bez sztucznego opuszczania brody
+    const jawT=usta&&!(lip.lib&&lip.lib.broda)?Math.max(-1,Math.min(1,oNow-vo))*JAW_PX*lip.alpha:0;
     lip.jaw+=(jawT-lip.jaw)*JAW_K;
     // przejście: klatki kolejne w nagraniu — twardo jak w wideo (24 kl/s); skok — krótkie przenikanie na końcu kroku
     let fx=0; if(fb!==fa){ const nat=lip.next[fa]===fb; fx=nat?(ff>=.5?1:0):Math.min(1,Math.max(0,(ff-(1-CFG.przenik))/CFG.przenik)); fx=fx*fx*(3-2*fx); }
@@ -1739,7 +1825,7 @@ function utworz(opt){
     glosySystemowe,
     gotoweUsta:()=>lip.ready,
     // dla testów i diagnostyki
-    wnetrze:{eng,neural,lip,lib,voice,lipFrameAt,zrzutNakladki,glowaAt,ruchGlowy,headMatrix,head:HEAD,poseFix,predictFrames,videoTime,lipShapeAt:t=>{ const x=lipFrameAt(t); return x?x.a:null; },lipTimeline,lipTargets,lipSelect,lipSelectRef,skrocPauzy,pytanieTakNie,intonacja,glos:GLOS,barwy:BARWY,voiceChain,cfg:CFG,openT:OPEN_T,trimSilence,phonesFromChars,synthNeural,loadLibrary}
+    wnetrze:{przeciagnijA,eng,neural,lip,lib,voice,lipFrameAt,zrzutNakladki,glowaAt,ruchGlowy,headMatrix,head:HEAD,poseFix,predictFrames,videoTime,lipShapeAt:t=>{ const x=lipFrameAt(t); return x?x.a:null; },lipTimeline,lipTargets,lipSelect,lipSelectRef,skrocPauzy,pytanieTakNie,intonacja,glos:GLOS,barwy:BARWY,voiceChain,cfg:CFG,openT:OPEN_T,trimSilence,phonesFromChars,synthNeural,loadLibrary}
   };
   if(hasTTS) speechSynthesis.addEventListener?.('voiceschanged',()=>emit('glosy',glosySystemowe()));
   return api;
@@ -2197,7 +2283,10 @@ chatForm.addEventListener('submit',async e=>{
     const msgs=[{role:'user',content:persona()+'\n\n(Początek rozmowy.)'},{role:'assistant',content:'Rozumiem.'},...ctxMsgs];
     const sp=mowa.strumien(); let started=false;
     let canTools=false; try{ canTools=!!(await sampleFn.limits?.())?.tools; }catch(e){}
-    const ruchy=[];   // ruchy zlecone w tej odpowiedzi — wykonane po krótkim potwierdzeniu
+    const ruchy=[], ruchyK=new Set();   // ruchy zlecone w tej odpowiedzi — wykonane po krótkim potwierdzeniu
+    // polecenia ruchu rozpoznane w wiadomości szefa: wykonujemy je zawsze (model dostaje informację, że ruch się odbędzie)
+    for(const k of ruchyZTekstu(q)){ const id=wariantRuchu(k); if(id){ ruchy.push(id); ruchyK.add(k); } }
+    if(ruchyK.size){ const ost=msgs[msgs.length-1]; ost.content+=`\n\n(Informacja od systemu: ruch ${[...ruchyK].join(', ')} wykona się na ekranie automatycznie zaraz po twojej odpowiedzi — nie wywołuj dla niego wykonaj_ruch. Potwierdź krótko i naturalnie, w czasie przyszłym albo teraźniejszym, np. „Już wstaję!”.)`; }
     // po przeczytaniu e-maila albo dokumentu (treść od osób trzecich) zmiany w pamięci, zadaniach i dokumentach
     // przechodzą tylko wtedy, gdy ich treść pochodzi od szefa — z jego wiadomości
     // kontekst rozmowy zawsze zawiera cudze treści (fragmenty e-maili, streszczenia dokumentów) — dlatego każda zmiana
@@ -2216,7 +2305,7 @@ chatForm.addEventListener('submit',async e=>{
     const dostepne=Object.entries(RUCHY_KAT).filter(([k,r])=>r.ids.length);
     const ruchTool={name:'wykonaj_ruch',description:'Wykonuje ruch na ekranie (za każdym razem w innym wariancie). Dostępne: '+dostepne.map(([k,v])=>k+' ('+v.n+')').join(', ')+'. Inne ruchy nie są jeszcze dostępne. Kilka ruchów pod rząd: wywołaj narzędzie kilka razy.',
       inputSchema:{type:'object',properties:{ruch:{type:'string',enum:dostepne.map(([k])=>k)}},required:['ruch']},
-      execute:async(inp)=>{ const id=wariantRuchu(inp&&inp.ruch); if(!id||!byId[id].src) return {wykonano:false,powod:'ruch niedostępny'}; if(ruchy.length>=4) return {wykonano:false,powod:'najwyżej 4 ruchy naraz'}; ruchy.push(id); return {wykonano:true,ruch:inp.ruch}; }};
+      execute:async(inp)=>{ if(inp&&ruchyK.has(inp.ruch)) return {wykonano:true,ruch:inp.ruch,uwaga:'już zaplanowany'}; const id=wariantRuchu(inp&&inp.ruch); if(id&&inp) ruchyK.add(inp.ruch); if(!id||(!id.startsWith('mow:')&&!byId[id].src)) return {wykonano:false,powod:'ruch niedostępny'}; if(ruchy.length>=4) return {wykonano:false,powod:'najwyżej 4 ruchy naraz'}; ruchy.push(id); return {wykonano:true,ruch:inp.ruch}; }};
     const mailTools=canTools&&mail.mcp&&mail.state==='on'?[
       {name:'szukaj_maili',description:'Szuka e-maili w Gmailu właściciela. Wejście: zapytanie w składni Gmaila, np. "from:jan newer_than:7d" albo "terrarium is:unread". Zwraca do 8 wątków: id, nadawca, temat, fragment, liczba wiadomości.',
        inputSchema:{type:'object',properties:{zapytanie:{type:'string',description:'Zapytanie w składni Gmaila'}},required:['zapytanie']},
@@ -2297,7 +2386,10 @@ chatForm.addEventListener('submit',async e=>{
     if(!busy.v) setStatus('Odpowiada');
     await sp.zakoncz(ans);
     // zlecone ruchy: po potwierdzeniu, gdy nic innego się nie dzieje (mowa nie przerywa klipu)
-    for(const id of ruchy){ if(busy.v) break; setStatus('Wykonuje polecenie'); await play([id]); }
+    // ruchy w tle: czat od razu przyjmuje następną wiadomość (ruch nie blokuje rozmowy)
+    if(ruchy.length) (async()=>{ for(const id of ruchy){ if(busy.v) break; setStatus('Wykonuje polecenie'); const ok=await wykonajRuch(id);
+      if(ok===false){ announce(pick(['Szefie, coś mi się zacięło z tym ruchem. Spróbuj jeszcze raz za chwilę.','Ups, ten ruch mi się nie wczytał. Poproś jeszcze raz, dobrze?']),'Ruch się nie udał'); break; } }
+      if(!busy.v&&!chatBusy) setStatus(SAY[cur.id]); })();
   }catch(err){
     her.textContent=err&&err.code==='rate_limited'?'Za dużo pytań naraz. Spróbuj za chwilę.':err&&err.code==='not_granted'?'Rozmowa wymaga zgody na pytania do Claude.':'Nie udało się odpowiedzieć. Spróbuj jeszcze raz.';
     chatHistory.pop();

@@ -3,7 +3,8 @@
 W 5 miejscach pętli (głowa prosto i przechylona) nagrywamy kolejne klatki animacji w trakcie mowy:
 samo wideo oraz wideo z ustami. Mierzymy:
   - dolną krawędź brody (przejście skóra → kołnierz) na środku: przesunięcie względem wideo musi mieścić się
-    w ruchu żuchwy i głowy (±9 px: żuchwa do 5 px, kiwnięcie głowy do 2,6 px, zapas 1 px) i nie skakać między kolejnymi klatkami (p99 skoku ≤ 2 px),
+    w ruchu żuchwy prawdziwej mowy (zmierzone na mówiącej pętli: -3,5…+9,3 px, skok między klatkami 24 kl./s p99 4,9 px)
+    plus kiwnięcie głowy: -9…+12 px, p99 skoku ≤ 5,5 px (od wersji 18 broda pochodzi z nagrania mowy, nie z przesunięcia),
   - boki żuchwy (krawędź twarzy 40 px nad brodą, gdzie kontur jest stromy; w nakładce wiersz przesunięty o kiwnięcie głowy —
     mierzymy rozjechanie warstw, nie zamierzony ruch): przesunięcie w bok ≤ 2 px (p90; detektor czasem myli kontur z paskiem kołnierza).
 Użycie: python3 tests/test_broda.py [URL]
@@ -21,10 +22,13 @@ REC = """()=>{ window.__seq=[]; const L=mowa.wnetrze.lip;
     if(__seq.length<150&&(mowa.zajeta||__seq.length<3)) requestAnimationFrame(loop); };
   requestAnimationFrame(loop); }"""
 
-def chin_y(img):
+def chin_y(img, near=None):
     g = cv2.GaussianBlur(cv2.cvtColor(img, cv2.COLOR_BGR2GRAY).astype(np.float32), (0, 0), 1.2)
     h, w = g.shape; col = g[:, w // 2 - 10:w // 2 + 10].mean(1)
-    d = np.diff(col); lo = 60; k = lo + int(np.argmin(d[lo:112]))
+    # near: szukamy w pobliżu brody z wideo (-10…+16 px; prawdziwa mowa opada do +9,3 px) — broda z nagrania mowy ma miękki
+    # kontur i bez tego detektor przeskakiwał na pasek kołnierza 30 px niżej
+    lo, hi = (60, 112) if near is None else (max(2, int(near) - 10), min(len(col) - 2, int(near) + 16))
+    d = np.diff(col); k = lo + int(np.argmin(d[lo:hi]))
     # dokładność podpikselowa (parabola)
     if 0 < k < len(d) - 1:
         a, b, c = d[k - 1], d[k], d[k + 1]; den = a - 2 * b + c
@@ -68,7 +72,7 @@ if __name__ == '__main__':
         prev = None
         for im, hd in seq:
             w = im.shape[1] // 2; raw, comp = im[:, :w], im[:, w:]
-            yr, yc = chin_y(raw), chin_y(comp)
+            yr = chin_y(raw); yc = chin_y(comp, yr)
             if abs(yc - yr) > 25: continue                      # krawędź nie znaleziona
             dy = yc - yr; dys.append(dy)
             if prev is not None: jumps.append(abs(dy - prev))
@@ -78,6 +82,6 @@ if __name__ == '__main__':
             sides += [abs(l1 - l0), abs(r1 - r0)]
     dys, jumps, sides = np.array(dys), np.array(jumps), np.array(sides)
     print(f'klatek {len(dys)} | opuszczenie brody: min {dys.min():+.1f} maks {dys.max():+.1f} px | skok między klatkami p99 {np.percentile(jumps,99):.2f} maks {jumps.max():.2f} px | boki żuchwy p90 {np.percentile(sides,90):.2f} px')
-    ok = len(dys) >= 200 and dys.min() >= -9 and dys.max() <= 9 and np.percentile(jumps, 99) <= 2 and np.percentile(sides, 90) <= 2 and not errs
+    ok = len(dys) >= 200 and dys.min() >= -9 and dys.max() <= 12 and np.percentile(jumps, 99) <= 5.5 and np.percentile(sides, 90) <= 2 and not errs
     print('BŁĘDY STRONY:', errs); print('WYNIK:', 'OK' if ok else 'NIE ZALICZONY')
     sys.exit(0 if ok else 1)

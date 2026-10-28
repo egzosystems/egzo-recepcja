@@ -105,7 +105,11 @@ json.dump(tory, open(os.path.join(out_dir, 'usta-tor.json'), 'w'), separators=('
 
 # --- 3) biblioteka prawdziwych klatek dolnej części twarzy (co STEP-ta klatka pętli + klipy mówienia)
 STEP = 2
-X0, Y0, TW, TH = 518, 188, 128, 116
+# DUŻA NAKŁADKA (EGZO_TWARZ=1, domyślnie): z prawdziwego nagrania mowy bierzemy całą dolną część twarzy — usta, policzki,
+# brodę i żuchwę naraz (tak jak ruszają się u człowieka), zamiast samego owalu warg na nieruchomej twarzy, który przy pełnej
+# artykulacji wyglądał na doklejony. Broda pochodzi wtedy z nagrania, więc strona nie opuszcza jej sztucznie (flaga 'broda').
+DUZA = os.environ.get('EGZO_TWARZ', '1') == '1'
+X0, Y0, TW, TH = (490, 186, 184, 128) if DUZA else (518, 188, 128, 116)
 yy, xx = np.mgrid[0:TH, 0:TW].astype(np.float32)
 cx, cy = MX - X0, MY - Y0 + 14
 ell = ((xx - cx) / 56) ** 2 + ((yy - cy) / 50) ** 2
@@ -114,6 +118,10 @@ ell = ((xx - cx) / 56) ** 2 + ((yy - cy) / 50) ** 2
 # i przy przejściach między klatkami z różnych póz kontur brody „pływał”.
 ellA = ((xx - (MX - X0)) / 46) ** 2 + ((yy - (MY - Y0 + 5)) / 31) ** 2
 mask = np.clip((1 - ellA) / 0.5, 0, 1) ** 1.2
+if DUZA:
+    # od dolnej krawędzi nosa do szyi pod brodą; z boków wewnątrz konturu żuchwy (kontur boczny zostaje z wideo)
+    ellF = ((xx - (MX - X0)) / 54) ** 2 + ((yy - (MY - Y0 + 20)) / 48) ** 2
+    mask = np.clip((1 - ellF) / 0.42, 0, 1) ** 1.1
 ang0 = np.radians(-9.5)
 EX = ((xx - (MX - X0)) * np.cos(ang0) - (yy - (MY - Y0)) * np.sin(ang0)) / 30
 EY = ((xx - (MX - X0)) * np.sin(ang0) + (yy - (MY - Y0)) * np.cos(ang0)) / 16
@@ -150,19 +158,32 @@ _labRef = cv2.cvtColor(refc, cv2.COLOR_BGR2LAB).astype(np.float32)[_ringK].mean(
 def kolor_jak_baza(c):
     l = cv2.cvtColor(c, cv2.COLOR_BGR2LAB).astype(np.float32); l += _labRef - l[_ringK].mean(0)
     return cv2.cvtColor(np.clip(l, 0, 255).astype(np.uint8), cv2.COLOR_LAB2BGR)
+
+# broda: w prawdziwej mowie (mówiąca pętla vs pętla, ta sama poza) opada o -3,5…+9,3 px względem wideo; kafelek z brodą
+# niżej niż +10 px albo wyżej niż -4 px (inna twarz / przesadna artykulacja klipu) dawałby skok konturu brody
+def broda_y(c):
+    g = cv2.GaussianBlur(cv2.cvtColor(c, cv2.COLOR_BGR2GRAY).astype(np.float32), (0, 0), 1.2)
+    col = g[:, TW // 2 - 10:TW // 2 + 10].mean(1); d = np.diff(col); lo = int(MY - Y0 + 22); hi = min(len(d), int(MY - Y0 + 75))
+    return lo + int(np.argmin(d[lo:hi]))
+_brodaRef = None
+def broda_ok(c):
+    global _brodaRef
+    if _brodaRef is None: _brodaRef = broda_y(refc)
+    return -4 <= broda_y(c) - _brodaRef <= 10
 def zgodna(c, prog=0.86):   # zmierzone: dobre klatki ≥ 0,88, zgubiony tor (głowa w dół przy śmiechu) 0,81–0,83
     v = _gK(c); v = (v - v.mean()) / (v.std() + 1e-6)
     return float((v * _refK).mean()) >= prog
 for p in extra:
-    tr = track_clip(p); sm = smooth([t for t, _, _ in tr]); odrz = 0
+    tr = track_clip(p); sm = smooth([t for t, _, _ in tr]); odrz = odrzB = 0
     for i, ((_, n, fr), T) in enumerate(zip(tr, sm)):
         if n < 0.85: continue
         mx, my = T @ np.float32([MX, MY, 1]); c = crop_of(fr, T)
         if not zgodna(c): odrz += 1; continue
+        if DUZA and not broda_ok(c): odrzB += 1; continue
         c = kolor_jak_baza(c)
         o, t = features(c)
         frames.append(dict(src=os.path.basename(p), i=i, open=o, teeth=t, crop=c, poza=project(fr, mx, my)))
-    print(f"klip {os.path.basename(p)}: odrzucone (zgubiony tor) {odrz}")
+    print(f"klip {os.path.basename(p)}: odrzucone (zgubiony tor) {odrz}, (broda poza zakresem prawdziwej mowy) {odrzB}")
 # --- 3b) UZUPEŁNIENIE OTWARCIA: nagranie otwiera i zamyka usta w 2–3 klatkach, więc brak ust półotwartych
 # (pomiar: w prostej pozie dziura 0,3–0,5 → usta przeskakiwały między „prawie zamknięte” a „otwarte”).
 # Dla sąsiednich klatek pętli z dużą zmianą otwarcia liczymy klatki pośrednie z przepływu optycznego (DIS);
@@ -268,7 +289,7 @@ for n, f in enumerate(frames):
     r, cc = divmod(n, cols)
     grid[r * TH:(r + 1) * TH, cc * TW:(cc + 1) * TW] = np.dstack([f['crop'], (mask * 255).astype(np.uint8)])
 cv2.imwrite(os.path.join(out_dir, 'usta-klatki.webp'), grid, [cv2.IMWRITE_WEBP_QUALITY, 90])
-json.dump({'tileW': TW, 'tileH': TH, 'x0': X0, 'y0': Y0, 'cols': cols,
+json.dump({'tileW': TW, 'tileH': TH, 'x0': X0, 'y0': Y0, 'cols': cols, 'broda': 1 if DUZA else 0,
            'frames': [{'src': f['src'], 'i': f['i'], 'open': round(f['fo'], 3), 'teeth': round(f['ft'], 3), **({'kopia': 1} if f.get('kopia') else {})} for f in frames],
            'poza': [[round(float(v), 2) for v in f['poza']] for f in frames],
            'next': nxt,

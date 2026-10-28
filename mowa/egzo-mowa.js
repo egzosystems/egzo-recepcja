@@ -407,7 +407,7 @@ const LIP_FPS=25;
 // spółgłoski między samogłoskami wyraźnie przymykają usta (pomiar: inaczej sylaby się zlewają)
 const OPEN_T={A:1,O:.85,E:.72,Y:.62,U:.55,I:.5,SH:.42,S:.28,L:.42,R:.42,TDN:.32,KG:.42,CH:.45,FV:.22,MBP:0};
 // strojenie doboru klatek (wyniki pomiarów: tests/test_realizm.py)
-const CFG={skok:.08, zostan:.03, roznica:.25, wygladz:0, przenik:.2, fala:true};
+const CFG={skok:.16, zostan:.03, roznica:.25, wygladz:0, przenik:.2, fala:true};   // skok .16 (było .08): biblioteka z prawdziwej mowy — mniej przeskoków między niesąsiednimi klatkami (migotanie p95 6,8 → 6,0)
 function lipTargets(m,offset,total,pcm){
   const n=Math.max(1,Math.ceil(total*LIP_FPS)), tg=new Float32Array(n);
   const sr=m.sampleRate, hop=Math.round(sr/LIP_FPS), env=new Float32Array(n);
@@ -583,6 +583,43 @@ function utworz(opt){
       return {pcm:f,dur:Float32Array.from(c.dur),chars:[...c.chars],hop:lib.idx.hop,sampleRate:lib.idx.sampleRate,pre:c.pre,text:c.text,ms:0}; });
   }
 
+
+  /* „Aaaa!” (np. na prośbę „otwórz szeroko buzię”): model mowy skraca powtórzone litery do ~0,4 s, a zwolnienie
+     całej syntezy psuje głos. Bierzemy naturalne „Aaa” i wydłużamy samą samogłoskę metodą WSOLA (nakładanie okien
+     z dopasowaniem przesunięcia — wysokość i barwa bez zmian); czasy głosek „a” rosną tak samo, więc usta
+     trzymają szerokie „a” przez cały dźwięk. */
+  const PRZECIAGNIJ=/^[\s,]*a{3,}[!.…\s]*$/i;
+  function wsola(seg,sr,target){
+    const N=Math.round(.03*sr), H=N>>1, tol=Math.round(.008*sr), win=new Float32Array(N);
+    for(let i=0;i<N;i++) win[i]=.5-.5*Math.cos(2*Math.PI*i/(N-1));
+    const out=new Float32Array(target+N), nrm=new Float32Array(target+N), rate=Math.max(0,(seg.length-N-2*tol))/Math.max(1,target-N);
+    let pin=0, prev=-1;
+    for(let o=0;o+N<=out.length;o+=H, pin+=H*rate){
+      const c=Math.floor(pin)+tol; let k=c;
+      if(prev>=0){ let best=-1e9; for(let d=-tol;d<=tol;d++){ const j=c+d; if(j<0||j+N>seg.length) continue; let v=0; for(let i=0;i<H;i++) v+=seg[j+i]*seg[prev+i]; if(v>best){ best=v; k=j; } } }
+      k=Math.min(Math.max(k,0),seg.length-N);
+      for(let i=0;i<N;i++){ out[o+i]+=seg[k+i]*win[i]; nrm[o+i]+=win[i]; }
+      prev=Math.min(k+H,seg.length-H);
+    }
+    const r=new Float32Array(target); for(let i=0;i<target;i++) r[i]=out[i]/Math.max(nrm[i],1e-3); return r;
+  }
+  function przeciagnijA(m,sek){
+    try{
+      const ch=m.chars||[], hop=m.hop||256, sr=m.sampleRate, d=m.dur; if(!d||!ch.length) return m;
+      let pos=0, s0=-1, s1=-1; const st=[];
+      for(let i=0;i<ch.length;i++){ st.push(pos); if(/a/i.test(ch[i])){ if(s0<0) s0=pos; s1=pos+d[i]*hop; } pos+=d[i]*hop; }
+      if(s0<0||s1-s0<.12*sr) return m;
+      const a=Math.round(s0+.25*(s1-s0)), b=Math.round(s0+.75*(s1-s0)), tgt=Math.round(sek*sr);
+      if(b>m.pcm.length||tgt<=b-a) return m;
+      const mid=wsola(m.pcm.subarray(a,b),sr,tgt), pcm=new Float32Array(m.pcm.length-(b-a)+tgt);
+      pcm.set(m.pcm.subarray(0,a),0); pcm.set(mid,a); pcm.set(m.pcm.subarray(b),a+tgt);
+      // dłuższe „a” w czasach głosek (klatki po hop próbek) — proporcjonalnie do ich długości
+      const dod=(tgt-(b-a))/hop, ia=ch.map((c,i)=>/a/i.test(c)?i:-1).filter(i=>i>=0), sumA=ia.reduce((x,i)=>x+d[i],0);
+      const dur=Float32Array.from(d); ia.forEach(i=>{ dur[i]=d[i]+dod*d[i]/sumA; });
+      return {...m,pcm,dur};
+    }catch(e){ return m; }
+  }
+
   /* ----- silnik mowy: dźwięk rusza, gdy cała wypowiedź gotowa; zdania na osi czasu karty dźwiękowej ----- */
   const eng={tok:0,pend:[],busy:false,ready:[],open:false,hold:true,endAt:0,last:'',live:0,waiters:[],stats:[],sources:[],ids:[]};
   function speechDone(){ if(!eng.open&&!eng.pend.length&&!eng.busy&&!eng.ready.length&&eng.live===0){ const w=eng.waiters.splice(0); w.forEach(f=>f()); } }
@@ -601,6 +638,7 @@ function utworz(opt){
       if(tok!==eng.tok) break;
       // tempo liczenia (sekundy liczenia na sekundę mowy) — do decyzji, kiedy można zacząć mówić
       if(m.ms&&m.pcm.length){ const r=(m.ms/1000)/(m.pcm.length/m.sampleRate); eng.rtf=eng.rtf?eng.rtf*.6+r*.4:r; }
+      if(PRZECIAGNIJ.test(text)) m=przeciagnijA(m,Math.min(2.4,.9+.18*(text.match(/a/gi)||[]).length));
       m.text=text; eng.ready.push(m); flushSpeech();
     }
     if(tok===eng.tok){ eng.busy=false; flushSpeech(); speechDone(); }
@@ -699,7 +737,7 @@ function utworz(opt){
      pozy byłyby krzywe (do 10°); przy bliskiej pozie błąd kąta < 1°. */
   const POSE_FREE=6, POSE_W=.03, POSE_MAX=16, K_CAND=64;
   // żuchwa: broda z wideo opuszcza się razem z otwieraniem ust (różnica otwarcia nakładka − wideo)
-  const JAW_PX=5, JAW_Y0=227, JAW_CHIN=268, JAW_K=.35;
+  const JAW_PX=5, JAW_Y0=227, JAW_CHIN=268, JAW_K=.28;   // .28: przy szerszej artykulacji (biblioteka z mówiącej pętli) skok brody między klatkami ≤ 2 px
   // głowa i brwi przy mówieniu (układ kadru bazowego): kiwnięcia z rytmu głośności, lekkie kołysanie, brwi przy pytaniach
   const HEAD={dyMax:2.6, rot:.0075, brow:1.6, pivot:[585,300], k:.3, gain:3.4};
   // płótna pomocnicze nakładki: rysowane procesorem (bez synchronizacji z kartą graficzną przy każdej warstwie)
@@ -772,6 +810,9 @@ function utworz(opt){
       for(let r=0;r<5;r++){ await oddaj(); const tg=lipTargets(m,0,total,pcm), js=lip.cand?Int16Array.from({length:tg.length},(_,i)=>(i*3)%lip.nL):null; lipSelect(tg,js); }
     }catch(e){}
   }
+  // opóźnienie wyjścia dźwięku (słuchawki Bluetooth: 150–300 ms, głośnik telefonu: 20–60 ms): currentTime karty dźwiękowej
+  // to chwila oddania próbek, a słychać je dopiero po outputLatency — usta muszą czekać tyle samo (inaczej wyprzedzają głos)
+  function opoznienieWyjscia(){ const c=neural.ctx; if(!c) return 0; const v=(c.outputLatency||0)+(c.baseLatency||0); return v>0&&v<.6?v:0; }
   const poseCost=(f,j)=>{ const d=lip.D[f*lip.nL+j]; return d>POSE_FREE?(d-POSE_FREE)*POSE_W:0; };
   // dokładny czas WYŚWIETLANEJ klatki wideo (requestVideoFrameCallback), inaczej currentTime
   function videoTime(v){
@@ -782,7 +823,7 @@ function utworz(opt){
   // które klatki pętli będą na ekranie w kolejnych krokach ust (od chwili `start` karty dźwiękowej)
   function predictFrames(start,n){
     const L=lip.nL, fps=lip.fps, dur=L/fps, w=o.wideo()||{}, now=neural.ctx.currentTime;
-    const base=(w.klip==='idle'&&w.el?videoTime(w.el):0)+(start-now);   // inna scena → pętla zacznie od początku
+    const base=(w.klip==='idle'&&w.el?videoTime(w.el):0)+(start-now)+opoznienieWyjscia();   // usta pokażą się dopiero, gdy dźwięk będzie słychać   // inna scena → pętla zacznie od początku
     const js=new Int16Array(n);
     for(let i=0;i<n;i++){ let tt=(base+(i+.5)/LIP_FPS)%dur; if(tt<0) tt+=dur; js[i]=Math.min(L-1,Math.floor(tt*fps)); }
     return js;
@@ -970,7 +1011,7 @@ function utworz(opt){
     const w=o.wideo()||{}, v=w.el, track=w.klip&&lip.tory[w.klip];
     let speaking=false, fa=lip.closed, fb=lip.closed, ff=0, pj=-1;
     if(track&&lip.segs.length&&neural.ctx){
-      const x=lipFrameAt(ct+o.wyprzedzenie);   // obraz wyprzedza dźwięk o 40 ms
+      const x=lipFrameAt(ct+o.wyprzedzenie-opoznienieWyjscia());   // obraz wyprzedza dźwięk o 40 ms (licząc od chwili, gdy dźwięk naprawdę słychać)
       if(x&&x.a>=0){ speaking=true; fa=x.a; fb=x.b; ff=x.f; pj=x.j; lip.celNow=x.cel; }
       else if(lip.segs.some(s=>ct<s.t0+s.dur+.25)) speaking=true;
     }
@@ -980,7 +1021,7 @@ function utworz(opt){
     if(!tr||tr[3]<.6) speaking=false;
     lip.alpha+=((speaking?1:0)-lip.alpha)*(speaking?.4:.15);
     // ruch głowy (sprężyna: płynne wejście i powrót po wypowiedzi)
-    const gh=(track&&w.klip==='idle'&&neural.ctx)?glowaAt(ct+o.wyprzedzenie):null;
+    const gh=(track&&w.klip==='idle'&&neural.ctx)?glowaAt(ct+o.wyprzedzenie-opoznienieWyjscia()):null;
     lip.hd+=((gh?gh.dy:0)-lip.hd)*HEAD.k; lip.hr+=((gh?gh.r:0)-lip.hr)*HEAD.k; lip.hb+=((gh?gh.b:0)-lip.hb)*HEAD.k;
     if(!tr||tr[3]<.6||w.klip!=='idle'){ lip.hd=lip.hr=lip.hb=0; }
     // pomiar płynności podczas mowy: gdy mimo trybu oszczędnego animacja ma < 32 kl/s, wyłącz ruch głowy (zostają usta, żuchwa, brwi)
@@ -1004,7 +1045,8 @@ function utworz(opt){
     }
     // żuchwa: docelowe opuszczenie brody = różnica otwarcia (nakładka − wideo), z bezwładnością mięśni
     const oNow=lip.open[fa]*(1-ff)+(fb>=0?lip.open[fb]:lip.open[fa])*ff, vo=lip.vopen&&w.klip==='idle'?lip.vopen[fi]:0;
-    const jawT=usta?Math.max(-1,Math.min(1,oNow-vo))*JAW_PX*lip.alpha:0;
+    // biblioteka z całą dolną częścią twarzy (broda z nagrania mowy): bez sztucznego opuszczania brody
+    const jawT=usta&&!(lip.lib&&lip.lib.broda)?Math.max(-1,Math.min(1,oNow-vo))*JAW_PX*lip.alpha:0;
     lip.jaw+=(jawT-lip.jaw)*JAW_K;
     // przejście: klatki kolejne w nagraniu — twardo jak w wideo (24 kl/s); skok — krótkie przenikanie na końcu kroku
     let fx=0; if(fb!==fa){ const nat=lip.next[fa]===fb; fx=nat?(ff>=.5?1:0):Math.min(1,Math.max(0,(ff-(1-CFG.przenik))/CFG.przenik)); fx=fx*fx*(3-2*fx); }
@@ -1093,7 +1135,7 @@ function utworz(opt){
     glosySystemowe,
     gotoweUsta:()=>lip.ready,
     // dla testów i diagnostyki
-    wnetrze:{eng,neural,lip,lib,voice,lipFrameAt,zrzutNakladki,glowaAt,ruchGlowy,headMatrix,head:HEAD,poseFix,predictFrames,videoTime,lipShapeAt:t=>{ const x=lipFrameAt(t); return x?x.a:null; },lipTimeline,lipTargets,lipSelect,lipSelectRef,skrocPauzy,pytanieTakNie,intonacja,glos:GLOS,barwy:BARWY,voiceChain,cfg:CFG,openT:OPEN_T,trimSilence,phonesFromChars,synthNeural,loadLibrary}
+    wnetrze:{przeciagnijA,eng,neural,lip,lib,voice,lipFrameAt,zrzutNakladki,glowaAt,ruchGlowy,headMatrix,head:HEAD,poseFix,predictFrames,videoTime,lipShapeAt:t=>{ const x=lipFrameAt(t); return x?x.a:null; },lipTimeline,lipTargets,lipSelect,lipSelectRef,skrocPauzy,pytanieTakNie,intonacja,glos:GLOS,barwy:BARWY,voiceChain,cfg:CFG,openT:OPEN_T,trimSilence,phonesFromChars,synthNeural,loadLibrary}
   };
   if(hasTTS) speechSynthesis.addEventListener?.('voiceschanged',()=>emit('glosy',glosySystemowe()));
   return api;

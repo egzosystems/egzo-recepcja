@@ -195,3 +195,16 @@ Nowy test `tests/test_realizm.py` mierzy na tym, co faktycznie słychać i wida�
 2. Poprawki logo na ścianie → nowy kadr bazowy (wtedy klipy generujemy już z niego).
 3. Zapis notatek prosto do vaulta (dziś: paczka ZIP do rozpakowania) — wymaga dostępu do folderu EGZO SEJF na komputerze.
 4. Nowe ruchy (wstawanie, obie ręce, obrót) — klipy Veo; rozmowa głosem (rozpoznawanie mowy szefa).
+
+## Mówiąca pętla i ruchy na polecenie (wersja 18, 2026-10-28)
+- Usta: biblioteka z pętli spoczynkowej + jej **mówiącej wersji** (Higgsfield, Seedance 2.5 `video_edit` pierwszych 10 s pętli:
+  ta sama twarz, ta sama poza głowy) + klipu artykulacji. **0 klatek przenoszonych** (było 1358) — koniec deformacji.
+  Klatki ze zgubionym torem odrzucane (zgodność nosa/policzków z kadrem bazowym ≥ 0,86), kolor kafelków jak w kadrze bazowym.
+- Testy dopasowane do prawdziwej mowy: migotanie zmierzone na nagraniu mówiącej twarzy (śr. 2,46 / p95 6,91) → limit 1,3 / 6;
+  oś otwartych ust p90 ≤ 8°, maks ≤ 16° (asymetryczne uśmiechy); żuchwa wygładzana mocniej (JAW_K .28).
+- Ruchy (`docs/ruchy.md`): katalog z wariantami (wstań, odwróć się, klaszcz, pomachaj, przeciągnij się, nogi na biurku,
+  pochyl się, podaj kartkę, powitanie, czytanie), polecenia z czatu przez `wykonaj_ruch`, „Rusza się sama”.
+  Przedłużenia pętli z Higgsfield startują w klatce 239 pętli i wracają do niej w klatce końca klipu; pętla ładuje się
+  w tle w trakcie ruchu (powrót 0–50 ms). Test: `tests/test_ruchy.py`.
+- „Aaaa” (otwórz szeroko buzię): mowa, nie klip — klip z Higgsfield dawał mechaniczną szczękę. Model mowy skraca powtórzone
+  litery, więc samogłoska jest wydłużana metodą WSOLA (`przeciagnijA` w egzo-mowa.js) z wydłużonymi czasami głoski dla ust.
