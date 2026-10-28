@@ -407,7 +407,7 @@ const LIP_FPS=25;
 // spółgłoski między samogłoskami wyraźnie przymykają usta (pomiar: inaczej sylaby się zlewają)
 const OPEN_T={A:1,O:.85,E:.72,Y:.62,U:.55,I:.5,SH:.42,S:.28,L:.42,R:.42,TDN:.32,KG:.42,CH:.45,FV:.22,MBP:0};
 // strojenie doboru klatek (wyniki pomiarów: tests/test_realizm.py)
-const CFG={skok:.16, zostan:.03, roznica:.25, wygladz:0, przenik:.2, fala:true};   // skok .16 (było .08): biblioteka z prawdziwej mowy — mniej przeskoków między niesąsiednimi klatkami (migotanie p95 6,8 → 6,0)
+const CFG={skok:.16, zostan:.03, roznica:.25, wygladz:0, przenik:.2, fala:true, rozsun:6, otwarcie:1, przesun:0};   // otwarcie: mnożnik celu ust; przesun: ms, dodatnie = usta później   // skok .16 (było .08): biblioteka z prawdziwej mowy — mniej przeskoków między niesąsiednimi klatkami (migotanie p95 6,8 → 6,0)
 function lipTargets(m,offset,total,pcm){
   const n=Math.max(1,Math.ceil(total*LIP_FPS)), tg=new Float32Array(n);
   const sr=m.sampleRate, hop=Math.round(sr/LIP_FPS), env=new Float32Array(n);
@@ -812,7 +812,7 @@ function utworz(opt){
   }
   // opóźnienie wyjścia dźwięku (słuchawki Bluetooth: 150–300 ms, głośnik telefonu: 20–60 ms): currentTime karty dźwiękowej
   // to chwila oddania próbek, a słychać je dopiero po outputLatency — usta muszą czekać tyle samo (inaczej wyprzedzają głos)
-  function opoznienieWyjscia(){ const c=neural.ctx; if(!c) return 0; const v=(c.outputLatency||0)+(c.baseLatency||0); return v>0&&v<.6?v:0; }
+  function opoznienieWyjscia(){ const c=neural.ctx; if(!c) return (CFG.przesun||0)/1000; const v=(c.outputLatency||0)+(c.baseLatency||0); return (v>0&&v<.6?v:0)+(CFG.przesun||0)/1000; }
   const poseCost=(f,j)=>{ const d=lip.D[f*lip.nL+j]; return d>POSE_FREE?(d-POSE_FREE)*POSE_W:0; };
   // dokładny czas WYŚWIETLANEJ klatki wideo (requestVideoFrameCallback), inaczej currentTime
   function videoTime(v){
@@ -893,6 +893,7 @@ function utworz(opt){
   function lipTimeline(m,offset,total,pcm,start){
     if(!lip.lib) return new Int16Array(Math.max(1,Math.ceil(total*LIP_FPS))).fill(-1);
     const tg=lipTargets(m,offset,total,pcm), js=lip.cand&&start!=null?predictFrames(start,tg.length):null;
+    if(CFG.otwarcie&&CFG.otwarcie!==1) for(let i=0;i<tg.length;i++) tg[i]=Math.min(1.3,tg[i]*CFG.otwarcie);   // suwak „otwieranie ust”
     const tl=lipSelect(tg,js); tl.js=js; tl.tg=tg; return tl;
   }
   // najbardziej zamknięte usta wśród klatek o pozie zgodnej z klatką pętli j
@@ -920,8 +921,18 @@ function utworz(opt){
     c.imageSmoothingEnabled=true; c.imageSmoothingQuality='high';
     const L=lip.lib, tw=L.tileW, th=L.tileH, t=lip.etile[e], sx=(t%L.cols)*tw, sy=Math.floor(t/L.cols)*th, m=lip.emat[e];
     c.setTransform(T[0],T[1],T[2],T[3],T[4],T[5]); c.globalAlpha=alpha;
-    if(m){ c.translate(x0,y0); c.transform(m[0],m[1],m[2],m[3],m[4],m[5]); c.drawImage(lip.img,sx,sy,tw,th,0,0,tw,th); }   // przeniesione usta: korekta do tej pozy
-    else c.drawImage(lip.img,sx,sy,tw,th,x0,y0,tw,th);
+    if(m){ c.translate(x0,y0); c.transform(m[0],m[1],m[2],m[3],m[4],m[5]); x0=0; y0=0; }   // przeniesione usta: korekta do tej pozy
+    const d=L.broda&&CFG.rozsun>0?Math.round(CFG.rozsun*Math.max(0,Math.min(1,lip.open[e]))):0;
+    if(d<1){ c.drawImage(lip.img,sx,sy,tw,th,x0,y0,tw,th); return; }
+    // SZERSZE OTWARCIE z tej samej klatki: pas na linii warg (wnętrze ust: zęby, ciemność) rozciągnięty o d px, dolna warga
+    // i broda zsunięte o d (jak przy opuszczeniu żuchwy), szyja pod brodą ściśnięta o d — dół nakładki zostaje na miejscu.
+    // d rośnie z otwarciem klatki, więc zamknięte usta (m/b/p) zostają nietknięte.
+    const ly=227-L.y0+2, h0=3, cy=Math.min(th-8,268-L.y0+2);
+    // pasy zachodzą na siebie o 1 px (bez cienkich szczelin na ułamkowych krawędziach po przekształceniu)
+    c.drawImage(lip.img,sx,sy,tw,ly-h0+1,x0,y0,tw,ly-h0+1);
+    c.drawImage(lip.img,sx,sy+ly-h0,tw,2*h0+1,x0,y0+ly-h0,tw,2*h0+d+1);
+    c.drawImage(lip.img,sx,sy+ly+h0,tw,cy-ly-h0+1,x0,y0+ly+h0+d,tw,cy-ly-h0+1);
+    c.drawImage(lip.img,sx,sy+cy,tw,th-cy,x0,y0+cy+d,tw,th-cy-d);
   }
   // macierze 2×3 w zapisie canvas [a,b,c,d,e,f]: (x,y) → (a·x + c·y + e, b·x + d·y + f)
   const mul=(p,q)=>[p[0]*q[0]+p[2]*q[1],p[1]*q[0]+p[3]*q[1],p[0]*q[2]+p[2]*q[3],p[1]*q[2]+p[3]*q[3],p[0]*q[4]+p[2]*q[5]+p[4],p[1]*q[4]+p[3]*q[5]+p[5]];
