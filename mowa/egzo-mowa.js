@@ -167,10 +167,10 @@ function ulamek(a,fr,gen,fem){ const n=+a;
 // narzędnik (z dwoma klientami, przed pięcioma minutami) — do 99
 function numNarz(n,fem){ const J1={1:'jednym',2:fem?'dwiema':'dwoma',3:'trzema',4:'czterema'};
   const u=x=>J1[x]||G_J[x].replace(/u$/,'oma');
-  if(n<20) return u(n); const d=G_D[Math.floor(n/10)].replace(/u$/,'oma'), j=n%10; return j?d+' '+u(j):d; }
+  if(n<20) return u(n); const d=G_D[Math.floor(n/10)].replace(/u$/,'oma'), j=n%10; return j?d+' '+(j===1?'jeden':u(j)):d; }
 const GEN_PL=/^(dni|tygodni|miesięcy|lat|osób|sztuk|godzin|minut|sekund|złotych|groszy|procent|stopni|razy|zamówień|zadań|maili|mejli|e-maili|dokumentów|klientów|tysięcy|milionów|metrów|centymetrów|kilogramów)$|(ów|ych|ich|eń|ań)$/i;
 // liczba 1 przed słowem: jeden / jedna / jedną / jedno (rzeczownik lub przymiotnik obok)
-function jeden(word,fem){ if(!word) return 'jeden';
+function jeden(word,fem){ if(!word||/^(na|do|i|w|we|z|ze|o|od|za|po|to|jest|są|lub|albo|a|czy|oraz|razy|x|raz|dzień|dnia)$/i.test(word)) return 'jeden';
   if(/(?:mię|zwierzę|cielę|źrebię)$/.test(word)) return 'jedno'; if(/[ęą]$/.test(word)&&!/się$/.test(word)) return 'jedną';
   if(fem||/a$/.test(word)) return 'jedna'; if(/(?:e|o|um)$/.test(word)) return 'jedno'; return 'jeden'; }
 function spokenPL(t){
@@ -284,12 +284,13 @@ function spokenPL(t){
   s=s.replace(/(?<![\d])(\d+)\.(\d+)(?![\d])/g,(m,a,b)=>numPL(+a)+' kropka '+numPL(+b));
   s=s.replace(new RegExp(`(?<![\\d,.])(\\d{1,2})\\.\\s+(?=([a-ząćęłńóśźż]+))`,'g'),(m,n,w,off,str)=>{ const fz=zenska(w)||/a$/.test(w);
     const c=/(?:^|[\s(,])(w|we|o|po|przy)\s*$/i.test(pre(str,off))?(fz?'fg':'l'):fz?'f':/(?:e|o|ie)$/.test(w)?'n':'m'; return ordPL(+n,c)+' '; });   // 3. raz → trzeci raz
-  s=s.replace(new RegExp(`(?<![\\d])(\\d+)(?:\\s*[-–—]\\s*(\\d+))?(?![\\d])(\\s+([${L_}]+))?(?=(?:\\s+([${L_}]+))?)`,'g'),(m,a,b,sp,word,word2,off,str)=>{
-    const p=pre(str,off), nomer=/(numer|nr|punkt|strona|stronie|pozycja|pozycji|pokój|lokal|rozdział|paragraf|art\.|artykuł)\s*$/i.test(p);
+  s=s.replace(new RegExp(`(?<![\\d])(\\d+)(?:\\s*[-–—]\\s*(\\d+))?(?![\\d])(\\s+([${L_}]+(?:-[${L_}]+)?))?(?=(?:\\s+([${L_}]+))?)`,'g'),(m,a,b,sp,word,word2,off,str)=>{
+    const p=pre(str,off), nomer=/(numer|nr|punkt|strona|stronie|pozycja|pozycji|pokój|lokal|rozdział|paragraf|art\.|artykuł|krok|etap|wersja|faza|opcja|wariant|klasa|piętro|sala|tydzień|dzień)\s*$/i.test(p);
     // dopełniacz po przyimku, gdy rzeczownik obok też jest w dopełniaczu (około trzech tygodni; ale „około trzy tygodnie” jak w tekście)
     const funkcyjne=/^(do|i|lub|albo|a|czy|oraz|na|razy)$/i.test(word||'');
     const gen=!nomer&&PRZ_GEN.test(p)&&(!word||funkcyjne||GEN_PL.test(word)||(+a===1&&/(?:a|u|y|i|ej)$/.test(word))), fem=!nomer&&(zenska(word)||(/(?:e|ie|ych|ich)$/i.test(word||'')&&zenska(word2)));
     if(!nomer&&b==null&&word&&/(?:ami|mi)$/.test(word)&&+a<100&&+a>1) return numNarz(+a,fem)+sp;   // z dwoma klientami
+    if(!nomer&&b==null&&+a===1&&word&&/(?:^|[\s(,])(z|ze|przed|za|nad|pod|między)\s*$/i.test(p)&&/(?:em|iem|ą)$/.test(word)) return (/ą$/.test(word)?'jedną':'jednym')+sp;   // z jednym klientem
     const L=x=>{ const t=numPL(+x,gen);
       if(+x===1&&!gen&&word) return jeden(word,fem);
       return fem&&!gen?numZ(+x,t):(fem&&gen&&+x===1?'jednej':t); };
@@ -338,6 +339,7 @@ function granicaZdania(t,i,koniec){
   const low=slowo.toLowerCase();
   if(SKR_NIE.has(low)) return -1;
   if(/^[A-ZĄĆĘŁŃÓŚŹŻ]$/.test(slowo)&&duza) return -1;              // inicjał: J. Kowalski
+  if(/^\d+$/.test(slowo)&&/(?:^|\n)[ \t]*\d+$/.test(t.slice(0,i))) return -1;   // „1. Zadzwonić…” — punkt listy, nie koniec zdania
   if(/^\d+$/.test(slowo)||SKR_MOZE.has(low)) return duza?k:-1;      // „w 2026. Potem” — tak; „15. listopada” — nie
   return k;
 }
@@ -441,7 +443,10 @@ function lipTargets(m,offset,total,pcm){
   const wt=new Float32Array(n).fill(1);
   for(const s of seg){ if(s.v!=='MBP'&&s.v!=='A'&&s.v!=='O') continue;
     const i=Math.round((s.t0+s.t1)/2*LIP_FPS-.5); if(i<0||i>=n) continue;
-    if(s.v==='MBP'){ tg[i]=0; wt[i]=3; } else { tg[i]=Math.max(tg[i],OPEN_T[s.v]*(.75+.45*env[i])); wt[i]=2; } }
+    if(s.v==='MBP'){   // domknięte usta przez całą głoskę (przy wolniejszym tempie m/b/p trwa 2 kroki ust)
+      const a0=Math.max(0,Math.ceil(s.t0*LIP_FPS-.5)), a1=Math.min(n-1,Math.floor(s.t1*LIP_FPS-.5));
+      for(let k=Math.min(a0,i);k<=Math.max(a1,i);k++){ tg[k]=0; wt[k]=3; } }
+    else { tg[i]=Math.max(tg[i],OPEN_T[s.v]*(.75+.45*env[i])); wt[i]=2; } }
   if(CFG.wygladz>0){   // bezwładność warg: wygładzenie celu, kroki przypięte (m/b/p, a/o) bez zmian
     const w=CFG.wygladz, s=Float32Array.from(tg);
     for(let i=1;i<n-1;i++) if(wt[i]<2) s[i]=(1-2*w)*tg[i]+w*(tg[i-1]+tg[i+1]);
@@ -484,12 +489,13 @@ function skrocPauzy(m,pcm,offset){
   out.set(pcm.subarray(r),w);
   return {pcm:out,dur:du};
 }
-const PYT_SZCZEG=/^(co|kto|kogo|komu|czym|gdzie|kiedy|jak|jaki|jaka|jakie|jakiego|dlaczego|czemu|ile|który|która|które|skąd|dokąd|po co|na co|o czym|z kim)\b/i;
+const PYT_SZCZEG=/^(co|kto|kogo|komu|kim|czym|czego|gdzie|kiedy|jak|jaki|jaka|jakie|jakiego|jakim|jaką|jakich|dlaczego|czemu|ile|ilu|który|która|które|którego|której|którym|skąd|dokąd|odkąd|czyj|czyja|czyje|po co|na co|o co|o czym|w czym|z czym|od czego|do czego|z kim|o której|o kim|za ile)(?![a-ząćęłńóśźż])/i;
 function pytanieTakNie(t){ t=String(t||'').trim(); if(!/\?["”»]?$/.test(t)) return false;
   const ost=t.split(/[,–—]/).pop().trim();   // „…, dobrze?” / „…, prawda?” — dopowiedzenie zawsze wznosi
-  if(/^(dobrze|prawda|tak|zgoda|pasuje|okej|ok)\b/i.test(ost)) return true;
-  if(/^czy\b/i.test(t)) return false;        // „czy…” model już wznosi
-  return !PYT_SZCZEG.test(t); }
+  if(/^(dobrze|prawda|tak|zgoda|pasuje|okej|ok)(?![a-ząćęłńóśźż])/i.test(ost)) return true;
+  const g=t.replace(/^(sze+f(ie|owo)|panie|pani)(\s+[A-ZĄĆĘŁŃÓŚŹŻ]\S*)?\s*,\s*/i,'');   // bez wołacza na początku
+  if(/^czy(?![a-ząćęłńóśźż])/i.test(g)||/^czy(?![a-ząćęłńóśźż])/i.test(ost)) return false;   // „czy…” model już wznosi
+  return !PYT_SZCZEG.test(g)&&!PYT_SZCZEG.test(ost); }
 // wyższy ton na ostatniej sylabie: przyspieszenie odtwarzania od początku ostatniej sylaby do środka ostatniej
 // samogłoski (czasy głosek z modelu), potem trzymane do końca; zwraca, o ile wcześniej kończy się dźwięk
 function intonacja(src,start,T,rise,m,offset){

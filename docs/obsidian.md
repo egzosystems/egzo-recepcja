@@ -57,7 +57,10 @@ zapisujesz przyciskiem i rozpakowujesz w vaulcie.
   w Gmailu do nadawcy (adres zawsze z nagłówka wiadomości). **Nigdy nic nie wysyła.** Limit 6 szkiców na godzinę
   i 30 na dobę; newslettery, adresy „noreply” i własna domena są pomijane. Wyłącznik w ramce „Ona sama powie”.
 - **Zadania z dokumentów i e-maili**: z analizy dokumentu (do 3) i z zapytania klienta (np. „przygotować wycenę…”).
-- **Przypomnienia o godzinie**, **przerwy w pracy**, **powiadomienia o nowych e-mailach**.
+- **Po 15:00** przypomina o zadaniach na dziś i po terminie; **po 17:00** podsumowuje dzień (zrobione zadania, nowe
+  dokumenty, szkice) i przypomina o paczce do Obsidiana — raz dziennie, tylko gdy coś się działo.
+- **Przypomnienia o godzinie**, **przerwy w pracy**, **powiadomienia o nowych e-mailach** (własne wiadomości szefa
+  i jego odpowiedzi w wątkach nie są ogłaszane).
 
 ## 5. Bezpieczeństwo
 
