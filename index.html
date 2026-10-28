@@ -2730,6 +2730,20 @@ setInterval(()=>{ if(!rozmowaChk.checked||glosWej.dziala||chatBusy||document.vis
   if(typeof mowa!=='undefined'&&mowa.zajeta){ glosWej.czekal=true; return; }
   if(glosWej.czekal){ glosWej.czekal=false; if(glosWej.niedostepne) chatIn.focus(); else sluchaj(); } },400);
 
+
+/* ---------- Obsidian: polecenia z wtyczki „EGZO Recepcja” (nasłuch „Hej, Egzo” działa na komputerze) ----------
+   Wtyczka wysyła do strony {egzo:'glos', tekst} przez postMessage z okna nadrzędnego; strona odsyła {egzo:'stan', mowi}
+   — wtyczka nie słucha, gdy asystentka mówi (żeby nie słyszała samej siebie). Przyjmujemy tylko wiadomości z okna głównego. */
+addEventListener('message',e=>{
+  if(e.source!==window.top||window.top===window) return;
+  const d=e.data; if(!d||typeof d!=='object') return;
+  if(d.egzo==='glos'&&typeof d.tekst==='string'){ const t=d.tekst.replace(/\s+/g,' ').trim().slice(0,500); if(!t) return;
+    if(chatBusy){ setTimeout(()=>{ if(!chatBusy){ chatIn.value=t; chatForm.requestSubmit(); } },1500); return; }
+    chatIn.value=t; chatForm.requestSubmit(); }
+  if(d.egzo==='nasluch'){ if(!busy.v) setStatus(d.on?'Słucha („Hej, Egzo”)':SAY[cur.id]); }
+});
+{ let ost=null; setInterval(()=>{ const m=typeof mowa!=='undefined'&&!!mowa.zajeta; if(m!==ost&&window.top!==window){ ost=m; try{ window.top.postMessage({egzo:'stan',mowi:m},'*'); }catch(e){} } },250); }
+
 /* ---------- Ziarno ---------- */
 (function(){const c=document.createElement('canvas');c.width=c.height=160;const x=c.getContext('2d');const im=x.createImageData(160,160);
  for(let i=0;i<im.data.length;i+=4){const v=Math.random()*255|0;im.data[i]=im.data[i+1]=im.data[i+2]=v;im.data[i+3]=255;}

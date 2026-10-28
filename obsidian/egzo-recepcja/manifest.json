@@ -1,0 +1,9 @@
+{
+  "id": "egzo-recepcja",
+  "name": "EGZO Recepcja",
+  "version": "0.1.0",
+  "minAppVersion": "1.4.0",
+  "description": "Asystentka EGZO w panelu obok Panelu Dziś (00 CENTRUM); łącznik do poleceń głosowych „Hej, Egzo”.",
+  "author": "EGZO SYSTEMS",
+  "isDesktopOnly": true
+}
