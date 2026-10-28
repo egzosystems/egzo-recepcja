@@ -199,6 +199,9 @@ input[type=range]{accent-color:var(--gold);width:100%}
       <div class="chat-log" id="chatLog"></div>
       <form id="chatForm"><input type="text" id="chatIn" placeholder="Np. co czeka na akceptację?" autocomplete="off"><button class="btn" type="button" id="micBtn" aria-pressed="false" title="Powiedz do niej">Mów</button><button class="btn pri" type="submit">Wyślij</button></form>
       <div class="hint" id="chatHint">Odpowiada na głos, gdy głos jest włączony.</div>
+      <button class="iconbtn" id="testMikBtn" type="button" style="margin-top:6px">Test mikrofonu na tym urządzeniu</button>
+      <div class="hint" id="testMikWynik" aria-live="polite"></div>
+      <label class="hint" style="display:flex;gap:8px;align-items:center;margin-top:4px"><input type="checkbox" id="nasluchChk"> Nasłuch „Hej, Egzo” — telefon, tablet, komputer (ekran musi być włączony; nie wygaszam go, dopóki nasłuch trwa)</label>
       <label class="hint" style="display:flex;gap:8px;align-items:center;margin-top:4px"><input type="checkbox" id="rozmowaChk"> Tryb rozmowy — po jej odpowiedzi od razu słucham (albo otwieram pole: mów przez mikrofon na klawiaturze)</label>
       <button class="iconbtn obsbtn" id="obsBtn" type="button" hidden>Zapisz dzisiejszą rozmowę do Obsidiana (.md)</button>
     </div>
@@ -2711,7 +2714,7 @@ function klawiatura(info){
   document.getElementById('chatHint').textContent=info||'Mikrofon strony jest tu niedostępny — dotknij pola i użyj mikrofonu na klawiaturze telefonu.';
   chatIn.focus();
 }
-function sluchaj(){
+let sluchaj=function(){
   const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
   if(!SR||glosWej.niedostepne){ klawiatura(); return; }
   if(glosWej.dziala) return;
@@ -2723,13 +2726,66 @@ function sluchaj(){
     r.onend=()=>{ micStan(false); const t=glosWej.tekst.trim(); if(t&&!chatBusy){ chatIn.value=t; chatForm.requestSubmit(); } };
     r.start(); micStan(true);
   }catch(e){ klawiatura(); }
-}
+};
 micBtn.onclick=()=>{ if(glosWej.dziala){ try{ glosWej.rec.stop(); }catch(e){} return; } sluchaj(); };
 // tryb rozmowy: gdy skończy mówić i rozmowa jest wolna — słuchamy dalej (albo pole czatu gotowe na mikrofon klawiatury)
 setInterval(()=>{ if(!rozmowaChk.checked||glosWej.dziala||chatBusy||document.visibilityState!=='visible') return;
   if(typeof mowa!=='undefined'&&mowa.zajeta){ glosWej.czekal=true; return; }
   if(glosWej.czekal){ glosWej.czekal=false; if(glosWej.niedostepne) chatIn.focus(); else sluchaj(); } },400);
 
+
+
+/* ---------- Nasłuch „Hej, Egzo”: ciągłe rozpoznawanie mowy przeglądarki (Chrome na Androidzie, Safari na iPhonie/iPadzie, Chrome/Edge na komputerze)
+   Słyszy wszystko, ale reaguje tylko na hasło; polecenie = reszta zdania po haśle albo następne zdanie (do 7 s).
+   Wstrzymuje się, gdy ona mówi albo czeka na odpowiedź (nie słyszy samej siebie); po przerwie wraca sam. Ekran trzymany włączony (Wake Lock). */
+const nasluch={on:false,rec:null,czeka:0,blokada:null,bledy:0,start:0};
+const nasluchChk=document.getElementById('nasluchChk');
+function bezOgonkow(t){ return t.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/ł/g,'l'); }
+const HASLO=/\b(?:hej|hey|hejze|ej|haj|hei)[\s,!.]*(?:egzo|ekso|egso|exo|eggzo|egzot|ekzo|egzu|exso|ekzu|egzon|ego)\b[\s,!.:]*/;
+function znajdzHaslo(t){ const n=bezOgonkow(t), m=HASLO.exec(n); if(!m) return null;
+  // reszta po haśle — z oryginalnego tekstu (te same długości po usunięciu znaków łączących liczymy po słowach)
+  const slowaPrzed=n.slice(0,m.index+m[0].length).trim().split(/\s+/).filter(Boolean).length;
+  return t.trim().split(/\s+/).slice(slowaPrzed).join(' ').replace(/^[,!.:\s]+/,''); }
+async function trzymajEkran(){ try{ if(nasluch.on&&'wakeLock' in navigator&&!nasluch.blokada&&document.visibilityState==='visible'){ nasluch.blokada=await navigator.wakeLock.request('screen'); nasluch.blokada.addEventListener('release',()=>{ nasluch.blokada=null; }); } }catch(e){} }
+function puscEkran(){ try{ nasluch.blokada&&nasluch.blokada.release(); }catch(e){} nasluch.blokada=null; }
+function wyslijPolecenie(t){ t=t.replace(/\s+/g,' ').trim().slice(0,500); if(!t) return; nasluch.czeka=0;
+  if(chatBusy){ setTimeout(()=>wyslijPolecenie(t),1500); return; } chatIn.value=t; chatForm.requestSubmit(); }
+function nasluchStatus(){ if(busy.v) return; setStatus(nasluch.czeka>Date.now()?'Słucham — co mam zrobić?':nasluch.on?'Słucha („Hej, Egzo”)':SAY[cur.id]); }
+function nasluchStart(){
+  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(!nasluch.on||nasluch.rec||glosWej.dziala||chatBusy||document.visibilityState!=='visible') return;
+  if(typeof mowa!=='undefined'&&mowa.zajeta) return;
+  if(!SR){ nasluchWylacz('Ta przeglądarka nie ma rozpoznawania mowy. Na telefonie otwórz recepcję w Chrome (Android) albo Safari (iPhone, iPad), albo mów przez mikrofon na klawiaturze.'); return; }
+  try{
+    const r=new SR(); r.lang='pl-PL'; r.continuous=true; r.interimResults=true; r.maxAlternatives=3; nasluch.rec=r; nasluch.start=Date.now();
+    r.onresult=e=>{ nasluch.bledy=0;
+      for(let i=e.resultIndex;i<e.results.length;i++){ const res=e.results[i]; if(!res.isFinal) continue;
+        let t=res[0].transcript, reszta=null;
+        for(let k=0;k<res.length&&reszta===null;k++){ reszta=znajdzHaslo(res[k].transcript); if(reszta!==null) t=res[k].transcript; }
+        if(reszta!==null){ if(reszta.split(/\s+/).filter(Boolean).length>=1){ try{ r.stop(); }catch(_){} wyslijPolecenie(reszta); }
+          else { nasluch.czeka=Date.now()+7000; nasluchStatus(); try{ navigator.vibrate&&navigator.vibrate(60); }catch(_){} } }
+        else if(nasluch.czeka>Date.now()&&t.trim()){ try{ r.stop(); }catch(_){} wyslijPolecenie(t); } }
+      nasluchStatus(); };
+    r.onerror=e=>{ if(e.error==='not-allowed'||e.error==='service-not-allowed'||e.error==='audio-capture')
+        nasluchWylacz('Strona nie dostała mikrofonu na tym urządzeniu. Kliknij „Test mikrofonu” i wyślij mi wynik — dobiorę inny sposób. Do tego czasu: mikrofon na klawiaturze.');
+      else if(e.error==='network') nasluch.bledy++; };
+    r.onend=()=>{ nasluch.rec=null; nasluchStatus(); };
+    r.start();
+  }catch(e){ nasluch.rec=null; nasluch.bledy++; }
+}
+function nasluchWylacz(info){ nasluch.on=false; nasluchChk.checked=false; store('egzo-nasluch',false); try{ nasluch.rec&&nasluch.rec.abort(); }catch(e){} nasluch.rec=null; puscEkran();
+  if(info) document.getElementById('chatHint').textContent=info; nasluchStatus(); }
+nasluchChk.onchange=()=>{ if(nasluchChk.checked){ nasluch.on=true; nasluch.bledy=0; store('egzo-nasluch',true); trzymajEkran(); nasluchStart(); nasluchStatus(); } else nasluchWylacz(); };
+// pętla: wstrzymaj, gdy ona mówi / czeka na odpowiedź; wznów, gdy cisza (z przerwą po błędach sieci)
+setInterval(()=>{ if(!nasluch.on) return;
+  const mowi=(typeof mowa!=='undefined'&&mowa.zajeta)||chatBusy||glosWej.dziala;
+  if(mowi&&nasluch.rec){ try{ nasluch.rec.abort(); }catch(e){} nasluch.rec=null; return; }
+  if(!mowi&&!nasluch.rec&&Date.now()-nasluch.start>Math.min(30000,600*Math.pow(2,nasluch.bledy))) nasluchStart(); },300);
+document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible'){ trzymajEkran(); } });
+// „Mów” ma pierwszeństwo przed nasłuchem (jeden mikrofon naraz)
+{ const stary=sluchaj; sluchaj=function(){ if(nasluch.rec){ try{ nasluch.rec.abort(); }catch(e){} nasluch.rec=null; } stary(); }; }
+// włączony poprzednio: przeglądarka wymaga dotknięcia, więc wracamy przy pierwszym dotknięciu strony
+if(store('egzo-nasluch')){ nasluchChk.checked=true; const wznow=()=>{ removeEventListener('pointerdown',wznow,true); if(nasluchChk.checked){ nasluch.on=true; trzymajEkran(); nasluchStart(); nasluchStatus(); } }; addEventListener('pointerdown',wznow,true); }
 
 /* ---------- Obsidian: polecenia z wtyczki „EGZO Recepcja” (nasłuch „Hej, Egzo” działa na komputerze) ----------
    Wtyczka wysyła do strony {egzo:'glos', tekst} przez postMessage z okna nadrzędnego; strona odsyła {egzo:'stan', mowi}
@@ -2743,6 +2799,24 @@ addEventListener('message',e=>{
   if(d.egzo==='nasluch'){ if(!busy.v) setStatus(d.on?'Słucha („Hej, Egzo”)':SAY[cur.id]); }
 });
 { let ost=null; setInterval(()=>{ const m=typeof mowa!=='undefined'&&!!mowa.zajeta; if(m!==ost&&window.top!==window){ ost=m; try{ window.top.postMessage({egzo:'stan',mowi:m},'*'); }catch(e){} } },250); }
+
+
+/* ---------- Test mikrofonu: co to urządzenie pozwala tej stronie (wynik decyduje o silniku rozpoznawania mowy) ---------- */
+document.getElementById('testMikBtn').onclick=async()=>{
+  const out=document.getElementById('testMikWynik'), w=[];
+  const ua=navigator.userAgent, urz=/iPad|Tablet/i.test(ua)?'tablet':/Mobi|Android|iPhone/i.test(ua)?'telefon':'komputer';
+  w.push('Urządzenie: '+urz+(/Obsidian/i.test(ua)?' (Obsidian)':'')+'.');
+  const SR=window.SpeechRecognition||window.webkitSpeechRecognition; w.push('Rozpoznawanie mowy przeglądarki: '+(SR?'jest':'brak')+'.');
+  let pol='?'; try{ const q=await navigator.permissions.query({name:'microphone'}); pol=q.state; }catch(e){ pol='nieznany'; }
+  w.push('Uprawnienie mikrofonu: '+pol+'.');
+  if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){ w.push('Mikrofon: strona nie ma do niego dostępu (brak getUserMedia).'); }
+  else{ try{ const st=await navigator.mediaDevices.getUserMedia({audio:true}); const ctx=new AudioContext(); const an=ctx.createAnalyser(); ctx.createMediaStreamSource(st).connect(an);
+      const b=new Float32Array(an.fftSize); let mx=0; const t0=performance.now(); while(performance.now()-t0<1200){ await new Promise(r=>setTimeout(r,60)); an.getFloatTimeDomainData(b); for(const x of b) mx=Math.max(mx,Math.abs(x)); }
+      st.getTracks().forEach(t=>t.stop()); ctx.close(); w.push('Mikrofon: DZIAŁA (poziom '+(mx*100).toFixed(0)+'%).'); }
+    catch(e){ w.push('Mikrofon: zablokowany ('+(e&&e.name||'błąd')+').'); } }
+  w.push('WebAssembly: '+(typeof WebAssembly==='object'?'jest':'brak')+', wątki: '+(navigator.hardwareConcurrency||'?')+'.');
+  out.textContent=w.join(' '); addMsg('her','Wynik testu mikrofonu: '+w.join(' '));
+};
 
 /* ---------- Ziarno ---------- */
 (function(){const c=document.createElement('canvas');c.width=c.height=160;const x=c.getContext('2d');const im=x.createImageData(160,160);
