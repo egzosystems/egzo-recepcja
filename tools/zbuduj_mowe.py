@@ -137,12 +137,32 @@ for i in range(0, len(idle), STEP):
     if n < 0.85: continue
     c = crop_of(fr, T); o, t = features(c)
     frames.append(dict(src=os.path.basename(idle_p), i=i, open=o, teeth=t, crop=c, poza=Pi[i]))
+# kontrola wyrównania klatek z klipów mówienia: nos, rynienka i policzki (bez warg i żuchwy) muszą się
+# zgadzać z kadrem bazowym — przy szybkim ruchu głowy ECC potrafi zgubić tor i kafelek byłby przesunięty
+_lipsK = ((xx - (MX - X0)) / 36) ** 2 + ((yy - (MY - Y0) - 3) / 19) ** 2 < 1
+_regK = ~_lipsK & ~(yy > (MY - Y0) + 22) & (ell < 1.0)
+_gK = lambda c: cv2.GaussianBlur(cv2.cvtColor(c, cv2.COLOR_BGR2GRAY).astype(np.float32), (0, 0), 1.2)[_regK]
+_refK = _gK(refc); _refK = (_refK - _refK.mean()) / (_refK.std() + 1e-6)
+# kolor: klip mówienia ma inne światło niż pętla — każdy kafelek dostaje średni kolor skóry pierścienia maski
+# (tam nakładka przechodzi w wideo) z kadru bazowego; bez tego na brzegu maski powstaje szew (test_broda: boki żuchwy)
+_ringK = (ellA > 0.45) & (ellA < 1.0) & ~_lipsK
+_labRef = cv2.cvtColor(refc, cv2.COLOR_BGR2LAB).astype(np.float32)[_ringK].mean(0)
+def kolor_jak_baza(c):
+    l = cv2.cvtColor(c, cv2.COLOR_BGR2LAB).astype(np.float32); l += _labRef - l[_ringK].mean(0)
+    return cv2.cvtColor(np.clip(l, 0, 255).astype(np.uint8), cv2.COLOR_LAB2BGR)
+def zgodna(c, prog=0.86):   # zmierzone: dobre klatki ≥ 0,88, zgubiony tor (głowa w dół przy śmiechu) 0,81–0,83
+    v = _gK(c); v = (v - v.mean()) / (v.std() + 1e-6)
+    return float((v * _refK).mean()) >= prog
 for p in extra:
-    tr = track_clip(p); sm = smooth([t for t, _, _ in tr])
+    tr = track_clip(p); sm = smooth([t for t, _, _ in tr]); odrz = 0
     for i, ((_, n, fr), T) in enumerate(zip(tr, sm)):
         if n < 0.85: continue
-        mx, my = T @ np.float32([MX, MY, 1]); c = crop_of(fr, T); o, t = features(c)
+        mx, my = T @ np.float32([MX, MY, 1]); c = crop_of(fr, T)
+        if not zgodna(c): odrz += 1; continue
+        c = kolor_jak_baza(c)
+        o, t = features(c)
         frames.append(dict(src=os.path.basename(p), i=i, open=o, teeth=t, crop=c, poza=project(fr, mx, my)))
+    print(f"klip {os.path.basename(p)}: odrzucone (zgubiony tor) {odrz}")
 # --- 3b) UZUPEŁNIENIE OTWARCIA: nagranie otwiera i zamyka usta w 2–3 klatkach, więc brak ust półotwartych
 # (pomiar: w prostej pozie dziura 0,3–0,5 → usta przeskakiwały między „prawie zamknięte” a „otwarte”).
 # Dla sąsiednich klatek pętli z dużą zmianą otwarcia liczymy klatki pośrednie z przepływu optycznego (DIS);

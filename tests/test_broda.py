@@ -34,8 +34,10 @@ def chin_y(img):
 def jaw_x(img, y):
     g = cv2.GaussianBlur(cv2.cvtColor(img, cv2.COLOR_BGR2GRAY).astype(np.float32), (0, 0), 1.2)
     row = g[y - 2:y + 3].mean(0); w = len(row); d = np.diff(row)
-    l = int(np.argmax(d[8:w // 2 - 15])) + 8          # lewa krawędź: ciemno → jasno
-    r = w // 2 + 15 + int(np.argmin(d[w // 2 + 15:w - 8]))
+    # szukamy z dala od ust (±48 px od środka): wiersz pomiaru wypada na wysokości warg, a szeroko otwarte
+    # usta z zębami (biblioteka z klipu mówienia) mają kąciki ostrzejsze niż kontur żuchwy (ok. ±60 px od środka)
+    l = int(np.argmax(d[8:w // 2 - 48])) + 8          # lewa krawędź: ciemno → jasno
+    r = w // 2 + 48 + int(np.argmin(d[w // 2 + 48:w - 8]))
     return float(l), float(r)
 
 def run(url):
