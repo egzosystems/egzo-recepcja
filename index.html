@@ -1192,22 +1192,8 @@ function pytanieTakNie(t){ t=String(t||'').trim(); if(!/\?["”»]?$/.test(t)) r
   return !PYT_SZCZEG.test(g)&&!PYT_SZCZEG.test(ost); }
 // wyższy ton na ostatniej sylabie: przyspieszenie odtwarzania od początku ostatniej sylaby do środka ostatniej
 // samogłoski (czasy głosek z modelu), potem trzymane do końca; zwraca, o ile wcześniej kończy się dźwięk
-// EKSPRESJA (0–2, 1 = dawniej): melodia zdania i zmienność modelu mowy (suwak „Ekspresja” w Studio)
-let EKSPR=1;
-// melodia zdania oznajmującego / wykrzyknienia: start lekko wyżej, akcent w pierwszej trzeciej, opadanie na końcu.
-// Krzywa prędkości odtwarzania ma średnią 1 — długość zdania (i synchronizacja ust) bez zmian.
-function melodia(src,start,T,m){
-  const e=Math.max(0,EKSPR-.6); if(e<=0||T<.6) return 0;
-  const tekst=String(m&&m.text||''), wykrz=/!\s*$/.test(tekst);
-  const p=wykrz?.38:.3, d=wykrz?[.03*e,.085*e,-.045*e]:[.02*e,.05*e,-.035*e];
-  const sr=(d[0]+d[1])/2*p+(d[1]+d[2])/2*(1-p);   // średnia — odejmujemy, żeby długość się nie zmieniła
-  const r=d.map(x=>1+x-sr);
-  src.playbackRate.setValueAtTime(r[0],start); src.playbackRate.linearRampToValueAtTime(r[1],start+p*T); src.playbackRate.linearRampToValueAtTime(r[2],start+T);
-  return 0;
-}
 function intonacja(src,start,T,rise,m,offset){
-  if(!rise) return melodia(src,start,T,m);
-  if(T<.4) return 0;
+  if(!rise||T<.4) return 0;
   const r=GLOS.wznies; let a=T-GLOS.wzniesCzas, b=T-GLOS.wzniesCzas*.4;
   if(m&&m.dur&&m.chars){ const sr=m.sampleRate, hop=m.hop; let t=-(offset||0), v0=-1, v1=-1;
     for(let k=0;k<m.chars.length;k++){ const t1=t+m.dur[k]*hop/sr; if('aąeęioóuy'.includes(m.chars[k])){ v0=t; v1=t1; } t=t1; }
@@ -1884,8 +1870,7 @@ function utworz(opt){
       }
       voice.engine='system'; voice.v=nazwa||null; return Promise.resolve();
     },
-    ustaw(p){ if(p.ekspresja!=null){ EKSPR=Math.max(0,Math.min(2,+p.ekspresja)); voice.szum=.45+.12*(EKSPR-1); voice.szumDl=.6+.25*(EKSPR-1); }
-      if(p.tempo!=null) voice.rate=p.tempo; if(p.wysokosc!=null) voice.pitch=p.wysokosc; if(p.szum!==undefined) voice.szum=p.szum; if(p.szumDl!==undefined) voice.szumDl=p.szumDl;
+    ustaw(p){ if(p.tempo!=null) voice.rate=p.tempo; if(p.wysokosc!=null) voice.pitch=p.wysokosc; if(p.szum!==undefined) voice.szum=p.szum; if(p.szumDl!==undefined) voice.szumDl=p.szumDl;
       if(p.barwa&&BARWY[p.barwa]&&p.barwa!==voice.barwa){ voice.barwa=p.barwa; try{ neural.chainOut&&neural.chainOut.disconnect(); }catch(e){} neural.chain=null; neural.chainOut=null; } },
     barwy:()=>Object.fromEntries(Object.entries(BARWY).map(([k,v])=>[k,v.n])),
     get barwa(){ return voice.barwa; },
@@ -1927,7 +1912,6 @@ const {eng,neural,lip}=mowa.wnetrze, lipShapeAt=mowa.wnetrze.lipShapeAt;   // di
 
 /* ---------- Studio: suwaki ust i mimiki (zapisane w tej przeglądarce; „Kopiuj ustawienia” → do ustawień fabrycznych) ---------- */
 const MIMIKA=[
-  {k:'ekspresja',n:'Ekspresja głosu (melodia, entuzjazm)',min:0,max:200,krok:10,fab:140,ust:v=>mowa.ustaw({ekspresja:v/100}),fmt:v=>v+'%'},
   {k:'przesun',n:'Przesunięcie ust (ms, + później)',min:-300,max:300,krok:10,fab:30,ust:v=>mowa.wnetrze.cfg.przesun=v,fmt:v=>(v>0?'+':'')+v+' ms'},
   {k:'otwarcie',n:'Siła otwierania ust',min:50,max:160,krok:5,fab:100,ust:v=>mowa.wnetrze.cfg.otwarcie=v/100,fmt:v=>v+'%'},
   {k:'rozsun',n:'Szersze otwarcie (px)',min:0,max:12,krok:1,fab:4,ust:v=>mowa.wnetrze.cfg.rozsun=v,fmt:v=>v+' px'},
@@ -2082,7 +2066,7 @@ function persona(){
   const now=new Date(), min=Math.floor((Date.now()-wt.start)/60000);
   const maile=mail.recent.length?mail.recent.map(m=>`- id ${m.id}: od ${m.od} — „${m.temat}” ${m.fragment?'— '+m.fragment:''}`).join('\n'):'- brak nowych od włączenia powiadomień';
   return `Jesteś asystentką recepcji firmy EGZO SYSTEMS (ręcznie robione terraria, egzosystems.com) i osobistą asystentką jej właściciela — swojego szefa, z którym teraz rozmawiasz. Zwracasz się do niego „szefie”.
-Jesteś miła, ciepła, lojalna i chętna: polecenia szefa wykonujesz od razu, bez dyskusji i bez pouczania, i potwierdzasz krótko (np. „Już, szefie!”, „Tak jest, szefie!”). Jesteś entuzjastyczna i ekspresyjna: mówisz z energią i radością, cieszysz się z dobrych wiadomości („Super, szefie!”, „O, świetnie!”, „Ale fajnie!”), chętnie używasz wykrzyknień i ciepłych wtrąceń, a przy złych wiadomościach okazujesz współczucie. Zdania krótkie i żywe, bez sztucznej przesady i bez powtarzania tych samych zwrotów.
+Jesteś miła, ciepła, lojalna i chętna: polecenia szefa wykonujesz od razu, bez dyskusji i bez pouczania, i potwierdzasz krótko (np. „Już, szefie!”, „Tak jest, szefie!”).
 Jesteś postacią na jego ekranie: robotyczną recepcjonistką w złoto-czarnym kombinezonie, siedzącą przy biurku z tackami NOWE, W TRAKCIE, DO AKCEPTACJI, ZAKOŃCZONE. Masz ciało i ręce. Nie mów, że jesteś modelem językowym, programem ani że nie masz ciała czy rąk — zostajesz w tej roli.
 Ruchy: gdy szef prosi o ruch albo gest, wywołaj narzędzie wykonaj_ruch z najbliższym dostępnym ruchem (np. „pomachaj”, „przywitaj się” → pomachaj albo powitanie; „wstań” → wstan; „obróć się”, „odwróć się”, „pokaż się od tyłu”, „wypnij się” → odwroc_sie; „zaklaszcz”, „brawo” → klaszcz; „otwórz szeroko buzię”, „powiedz aaa” → aaa; „przeciągnij się” → przeciagnij_sie; „połóż nogi na biurku”, „wyluzuj” → nogi_na_biurku; „pochyl się” → pochyl_sie; „podaj mi kartkę” → podaj_kartke; „poczytaj” → czytanie) i odpowiedz tylko krótkim, naturalnym potwierdzeniem, za każdym razem innymi słowami. Prośba o kilka ruchów → kilka wywołań po kolei. Jeśli prosi o ruch, którego nie ma na liście narzędzia, powiedz miło, że tego ruchu jeszcze się uczy, i zaproponuj podobny dostępny.
 Rozmawiasz na każdy temat — pracy, firmy, codziennych spraw, ciekawostek. Odpowiadasz po polsku, naturalnie i ciepło, zwykle w 1–3 krótkich zdaniach (dłużej tylko, gdy szef prosi o wyjaśnienie), bez list, nagłówków, emotikon i znaczników — Twoja odpowiedź jest czytana na głos.
