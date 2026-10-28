@@ -1881,7 +1881,11 @@ const MIMIKA=[
   {k:'przenik',n:'Płynność przejść',min:0,max:60,krok:5,fab:20,ust:v=>mowa.wnetrze.cfg.przenik=v/100,fmt:v=>v+'%'},
   {k:'skok',n:'Unikanie przeskoków',min:0,max:40,krok:2,fab:16,ust:v=>mowa.wnetrze.cfg.skok=v/100,fmt:v=>(v/100).toFixed(2)},
   {k:'glowa',n:'Kiwanie głową',min:0,max:200,krok:10,fab:100,ust:v=>{ const H=mowa.wnetrze.head; H.__dy??=H.dyMax; H.__rot??=H.rot; H.dyMax=H.__dy*v/100; H.rot=H.__rot*v/100; },fmt:v=>v+'%'},
-  {k:'brwi',n:'Ruch brwi',min:0,max:200,krok:10,fab:100,ust:v=>{ const H=mowa.wnetrze.head; H.__br??=H.brow; H.brow=H.__br*v/100; },fmt:v=>v+'%'}
+  {k:'brwi',n:'Ruch brwi',min:0,max:200,krok:10,fab:100,ust:v=>{ const H=mowa.wnetrze.head; H.__br??=H.brow; H.brow=H.__br*v/100; },fmt:v=>v+'%'},
+  // obraz: ziarno filmowe na całej scenie (maskuje drobne różnice faktury ust i twarzy), wielkość ziarna, kolory
+  {k:'ziarno',n:'Ziarno filmowe',min:0,max:60,krok:1,fab:7,ust:v=>{ document.getElementById('grain').style.opacity=(v/100).toFixed(2); },fmt:v=>v+'%'},
+  {k:'ziarnoW',n:'Wielkość ziarna',min:1,max:4,krok:1,fab:1,ust:v=>{ const g=document.getElementById('grain'); g.style.backgroundSize=(160*v)+'px '+(160*v)+'px'; g.style.imageRendering=v>1?'pixelated':''; },fmt:v=>v+'×'},
+  {k:'kolor',n:'Kolory (nasycenie)',min:50,max:120,krok:5,fab:100,ust:v=>{ document.getElementById('cam').style.filter=v===100?'':`saturate(${v/100})`; },fmt:v=>v+'%'}
 ];
 const mimika=Object.assign(Object.fromEntries(MIMIKA.map(m=>[m.k,m.fab])),store('egzo-mimika')||{});
 { const box=document.getElementById('mimikaKnobs');
