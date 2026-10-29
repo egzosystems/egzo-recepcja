@@ -1,7 +1,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#0b0a08">
-<script src="lib/samodzielna.js?v=d92f60bb"></script>
+<script src="lib/samodzielna.js?v=efdf8000"></script>
 <title>EGZO Recepcja</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -2394,8 +2394,8 @@ chatForm.addEventListener('submit',async e=>{
   e.preventDefault(); const q=chatIn.value.trim(); if(!q) return;
   const podp=document.getElementById('chatHint');
   if(!sampleFn){ podp.textContent=window.EGZO_SAMODZIELNA?'Najpierw wklej klucz nad czatem — bez niego nie odpowiem.':'Rozmowa działa po otwarciu strony w Claude.'; return; }
-  if(chatBusy){ if(Date.now()-(window.__chatOd||0)>45000){ chatAbort?.abort(); chatBusy=false; }        // zawieszona odpowiedź nie blokuje czatu na zawsze
-    else { podp.textContent='Jeszcze kończy poprzednią odpowiedź — wyślij za chwilę (albo za 45 s odblokuje się sama).'; return; } }
+  if(chatBusy){ if(Date.now()-(window.__chatOd||0)>35000){ chatAbort?.abort(); chatBusy=false; }        // zawieszona odpowiedź nie blokuje czatu na zawsze
+    else { podp.textContent='Jeszcze kończy poprzednią odpowiedź — wyślij za chwilę (albo za 35 s odblokuje się sama).'; return; } }
   chatBusy=true; window.__chatOd=Date.now();
   chatIn.value=''; addMsg('me',q); const uMsg={role:'user',content:q,t:Date.now()}; chatHistory.push(uMsg);
   const her=addMsg('her','…'); chatAbort?.abort(); chatAbort=new AbortController();
@@ -2521,6 +2521,11 @@ chatForm.addEventListener('submit',async e=>{
   chatBusy=false;
   if(!busy.v) setStatus(SAY[cur.id]);
 });
+
+/* ---------- Diagnostyka rozmowy (wersja na telefon): etap i czas widoczne pod czatem ---------- */
+{ let etap=''; addEventListener('egzo-diag',e=>{ etap=String(e.detail||''); });
+  setInterval(()=>{ if(!window.EGZO_SAMODZIELNA||!chatBusy) return; const s=Math.round((Date.now()-(window.__chatOd||Date.now()))/1000);
+    document.getElementById('chatHint').textContent=(etap||'Przygotowuję pytanie…')+' '+s+' s'; },500); }
 
 /* ---------- Zdarzenia: asystentka sama się odzywa (kolejka — nigdy nie przerywa pracy ani rozmowy) ---------- */
 const evq={queue:[],running:false,log:[]};
