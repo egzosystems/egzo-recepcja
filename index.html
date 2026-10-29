@@ -1,7 +1,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#0b0a08">
-<script src="lib/samodzielna.js?v=cd7c1dd2"></script>
+<script src="lib/samodzielna.js?v=d92f60bb"></script>
 <title>EGZO Recepcja</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -2391,8 +2391,12 @@ async function paczkaPliki(){
 })();
 let chatAbort=null;
 chatForm.addEventListener('submit',async e=>{
-  e.preventDefault(); const q=chatIn.value.trim(); if(!q||!sampleFn||chatBusy) return;
-  chatBusy=true;
+  e.preventDefault(); const q=chatIn.value.trim(); if(!q) return;
+  const podp=document.getElementById('chatHint');
+  if(!sampleFn){ podp.textContent=window.EGZO_SAMODZIELNA?'Najpierw wklej klucz nad czatem — bez niego nie odpowiem.':'Rozmowa działa po otwarciu strony w Claude.'; return; }
+  if(chatBusy){ if(Date.now()-(window.__chatOd||0)>45000){ chatAbort?.abort(); chatBusy=false; }        // zawieszona odpowiedź nie blokuje czatu na zawsze
+    else { podp.textContent='Jeszcze kończy poprzednią odpowiedź — wyślij za chwilę (albo za 45 s odblokuje się sama).'; return; } }
+  chatBusy=true; window.__chatOd=Date.now();
   chatIn.value=''; addMsg('me',q); const uMsg={role:'user',content:q,t:Date.now()}; chatHistory.push(uMsg);
   const her=addMsg('her','…'); chatAbort?.abort(); chatAbort=new AbortController();
   if(!busy.v) setStatus('Słucha');
@@ -2504,7 +2508,7 @@ chatForm.addEventListener('submit',async e=>{
     const ans=(r.text||'').trim()||'Przepraszam, nie usłyszałam. Możesz powtórzyć?';
     her.textContent=ans; const aMsg={role:'assistant',content:ans,t:Date.now()}; chatHistory.push(aMsg); store('egzo-rozmowa',chatHistory.slice(-40)); histSave([uMsg,aMsg]);
     if(!busy.v) setStatus('Odpowiada');
-    await sp.zakoncz(ans);
+    await Promise.race([sp.zakoncz(ans), wait(8000+ans.length*110)]);   // mowa nie trzyma czatu, gdyby dźwięk się zaciął
     // zlecone ruchy: po potwierdzeniu, gdy nic innego się nie dzieje (mowa nie przerywa klipu)
     // ruchy w tle: czat od razu przyjmuje następną wiadomość (ruch nie blokuje rozmowy)
     if(ruchy.length) (async()=>{ for(const id of ruchy){ if(busy.v) break; setStatus('Wykonuje polecenie'); const ok=await wykonajRuch(id);
