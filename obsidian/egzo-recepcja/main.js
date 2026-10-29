@@ -9,7 +9,7 @@ const { Plugin, ItemView, Notice, Modal, Setting, PluginSettingTab } = require('
 
 const WIDOK = 'egzo-recepcja-widok';
 const DOMYSLNE = {
-  adres: 'https://claude.ai/artifact/S45g1VQoif7x12fajPCdaf',
+  adres: 'https://egzosystems.github.io/egzo-recepcja/',   // wersja z mikrofonem (rozmowa przez klucz Gemini zapisany w tym panelu)
   notatkaPanelu: '00 CENTRUM.md',
   otwierajZPanelem: true
 };
@@ -28,6 +28,12 @@ class WidokRecepcji extends ItemView {
     w.setAttribute('allowpopups', '');            // logowanie Google/Claude otwiera okienko
     w.style.width = '100%'; w.style.height = '100%'; w.style.border = '0';
     el.appendChild(w); this.web = w;
+    // mikrofon w panelu: Obsidian (Electron) domyślnie pyta/odmawia — zezwalamy tylko stronie recepcji
+    try { const { session } = require('electron').remote || require('@electron/remote');
+      const ses = session.fromPartition('persist:egzo-recepcja'), dozw = new URL(this.plugin.ustawienia.adres).origin;
+      ses.setPermissionRequestHandler((wc, perm, cb, det) => cb(['media','audioCapture','microphone','wake-lock','screen-wake-lock'].includes(perm) && String((det && det.requestingUrl) || wc.getURL()).startsWith(dozw)));
+      ses.setPermissionCheckHandler((wc, perm, origin) => ['media','audioCapture','microphone'].includes(perm) ? String(origin).startsWith(dozw) : false);
+    } catch (e) { /* bez dostępu do sesji: strona zapyta sama */ }
     // stan „mówi” ze strony: nasłuchujemy w oknie głównym strony i odczytujemy co chwilę
     w.addEventListener('dom-ready', () => {
       w.executeJavaScript(`(function(){ if(window.__egzoStan) return; window.__egzoStan={mowi:false,t:0};
@@ -75,6 +81,7 @@ class UstawieniaRecepcji extends PluginSettingTab {
 module.exports = class EgzoRecepcja extends Plugin {
   async onload() {
     this.ustawienia = Object.assign({}, DOMYSLNE, await this.loadData());
+    if (/claude\.ai\/artifact\//.test(this.ustawienia.adres || '')) { this.ustawienia.adres = DOMYSLNE.adres; await this.zapisz(); }   // stara wersja w Claude nie ma mikrofonu
     this.registerView(WIDOK, leaf => new WidokRecepcji(leaf, this));
     this.addRibbonIcon('bot', 'Recepcja EGZO', () => this.pokaz(true));
     this.addCommand({ id: 'otworz', name: 'Otwórz recepcję', callback: () => this.pokaz(true) });

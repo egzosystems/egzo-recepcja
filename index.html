@@ -2823,7 +2823,8 @@ if(store('egzo-nasluch')){ nasluchChk.checked=true; const wznow=()=>{ removeEven
    Wtyczka wysyła do strony {egzo:'glos', tekst} przez postMessage z okna nadrzędnego; strona odsyła {egzo:'stan', mowi}
    — wtyczka nie słucha, gdy asystentka mówi (żeby nie słyszała samej siebie). Przyjmujemy tylko wiadomości z okna głównego. */
 addEventListener('message',e=>{
-  if(e.source!==window.top||window.top===window) return;
+  // w Claude: wiadomość od okna nadrzędnego (wtyczka); w wersji samodzielnej w panelu Obsidiana wtyczka wysyła do samej strony
+  if(window.EGZO_SAMODZIELNA){ if(e.source!==window) return; } else if(e.source!==window.top||window.top===window) return;
   const d=e.data; if(!d||typeof d!=='object') return;
   if(d.egzo==='glos'&&typeof d.tekst==='string'){ const t=d.tekst.replace(/\s+/g,' ').trim().slice(0,500); if(!t) return;
     if(chatBusy){ setTimeout(()=>{ if(!chatBusy){ chatIn.value=t; chatForm.requestSubmit(); } },1500); return; }
