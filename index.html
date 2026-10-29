@@ -1,7 +1,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#0b0a08">
-<script src="lib/samodzielna.js?v=5dc8ac77"></script>
+<script src="lib/samodzielna.js?v=b59a4506"></script>
 <title>EGZO Recepcja</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -2511,7 +2511,7 @@ chatForm.addEventListener('submit',async e=>{
       if(ok===false){ announce(pick(['Szefie, coś mi się zacięło z tym ruchem. Spróbuj jeszcze raz za chwilę.','Ups, ten ruch mi się nie wczytał. Poproś jeszcze raz, dobrze?']),'Ruch się nie udał'); break; } }
       if(!busy.v&&!chatBusy) setStatus(SAY[cur.id]); })();
   }catch(err){
-    her.textContent=err&&err.code==='rate_limited'?'Za dużo pytań naraz. Spróbuj za chwilę.':err&&err.code==='not_granted'?'Rozmowa wymaga zgody na pytania do Claude.':'Nie udało się odpowiedzieć. Spróbuj jeszcze raz.';
+    her.textContent=window.EGZO_SAMODZIELNA&&err&&err.message?('Nie udało się odpowiedzieć: '+err.message):err&&err.code==='rate_limited'?'Za dużo pytań naraz. Spróbuj za chwilę.':err&&err.code==='not_granted'?'Rozmowa wymaga zgody na pytania do Claude.':'Nie udało się odpowiedzieć. Spróbuj jeszcze raz.';
     chatHistory.pop();
   }
   chatBusy=false;
