@@ -1,7 +1,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#0b0a08">
-<script src="lib/samodzielna.js?v=a8bc777e"></script>
+<script src="lib/samodzielna.js?v=5dc8ac77"></script>
 <title>EGZO Recepcja</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -2767,14 +2767,15 @@ async function vadStart(){
     if(!nasluch.on){ st.getTracks().forEach(t=>t.stop()); return; }
     vad.st=st; vad.ctx=vad.ctx||new (window.AudioContext||window.webkitAudioContext)(); if(vad.ctx.state==='suspended'){ try{ await vad.ctx.resume(); }catch(e){} }
     const src=vad.ctx.createMediaStreamSource(st); vad.an=vad.ctx.createAnalyser(); vad.an.fftSize=1024; src.connect(vad.an); vad.buf=new Float32Array(vad.an.fftSize); vad.nad=0;
-    vad.t=setInterval(vadKrok,50); nasluch.vadOk=true;
+    vad.od=Date.now(); vad.t=setInterval(vadKrok,50); nasluch.vadOk=true;
   }catch(e){ nasluch.vadOk=false; }
   finally{ vad.startuje=false; }
 }
 function vadKrok(){ if(!vad.an) return; vad.an.getFloatTimeDomainData(vad.buf); let s=0; for(const x of vad.buf) s+=x*x; const rms=Math.sqrt(s/vad.buf.length);
   if(rms<vad.tlo*2) vad.tlo=vad.tlo*.97+rms*.03;            // poziom tła (szum pokoju) uczy się sam
-  vad.nad=rms>Math.max(.012,vad.tlo*3.5)?vad.nad+1:0;
-  if(vad.nad>=3){ vadStop(); nasluchStart(); } }
+  if(Date.now()-vad.od<600){ vad.h=[]; return; }           // pierwsze chwile: mikrofon się ustawia (i wybrzmiewa pyknięcie telefonu)
+  vad.h=(vad.h||[]).concat(rms>Math.max(.015,vad.tlo*4)?1:0).slice(-8);   // sylaby z przerwami: liczy głośne chwile w ostatnich 0,4 s
+  if(vad.h.reduce((a,b)=>a+b,0)>=4){ vad.h=[]; vadStop(); nasluchStart(); } }
 function vadStop(){ if(vad.t){ clearInterval(vad.t); vad.t=null; } if(vad.st){ vad.st.getTracks().forEach(t=>t.stop()); vad.st=null; } vad.an=null; }
 function nasluchStart(){
   const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
@@ -2785,8 +2786,9 @@ function nasluchStart(){
     const r=new SR(); r.lang='pl-PL'; r.continuous=!nasluch.vadOk; r.interimResults=true; r.maxAlternatives=3; nasluch.rec=r; nasluch.start=Date.now();
     r.onresult=e=>{ nasluch.bledy=0;
       for(let i=e.resultIndex;i<e.results.length;i++){ const res=e.results[i]; if(!res.isFinal) continue;
-        let t=res[0].transcript, reszta=null;
+        let t=res[0].transcript, reszta=null; const podp=document.getElementById('chatHint');
         for(let k=0;k<res.length&&reszta===null;k++){ reszta=znajdzHaslo(res[k].transcript); if(reszta!==null) t=res[k].transcript; }
+        if(podp) podp.textContent='Usłyszałam: „'+t.trim()+'”'+(reszta===null&&!(nasluch.czeka>Date.now())?' — zacznij od „Hej, Egzo”.':'')+(!sampleFn?' (Najpierw wklej klucz nad czatem — bez niego nie odpowiem.)':'');
         if(reszta!==null){ if(reszta.split(/\s+/).filter(Boolean).length>=1){ try{ r.stop(); }catch(_){} wyslijPolecenie(reszta); }
           else { nasluch.czeka=Date.now()+7000; nasluchStatus(); try{ navigator.vibrate&&navigator.vibrate(60); }catch(_){} } }
         else if(nasluch.czeka>Date.now()&&t.trim()){ try{ r.stop(); }catch(_){} wyslijPolecenie(t); } }
@@ -2794,7 +2796,7 @@ function nasluchStart(){
     r.onerror=e=>{ if(e.error==='not-allowed'||e.error==='service-not-allowed'||e.error==='audio-capture')
         nasluchWylacz(/Mobi|Android|iPhone|iPad/i.test(navigator.userAgent)?'Aplikacja Claude nie daje tej stronie mikrofonu, więc nasłuch się wyłączył. Spróbuj otworzyć ten link w Chrome (Android) albo Safari (iPhone/iPad). Na teraz: dotknij pola i mów przez mikrofon na klawiaturze — z „Trybem rozmowy” pole otwiera się samo po każdej jej odpowiedzi.':'Przeglądarka nie dała tej stronie mikrofonu. Zezwól na mikrofon (ikona kłódki przy adresie) albo użyj Obsidiana na komputerze.');
       else if(e.error==='network') nasluch.bledy++; };
-    r.onend=()=>{ nasluch.rec=null; nasluchStatus();
+    r.onend=()=>{ nasluch.rec=null; nasluch.koniec=Date.now(); nasluchStatus();
       // po samym „Hej, Egzo” słuchamy od razu dalej (polecenie), bez czekania na czujnik
       if(nasluch.on&&nasluch.czeka>Date.now()) setTimeout(()=>{ if(!nasluch.rec) nasluchStart(); },150); };
     r.start();
@@ -2809,7 +2811,7 @@ setInterval(()=>{ if(!nasluch.on) return;
   const ukryta=document.visibilityState!=='visible';
   if(mowi||ukryta){ if(nasluch.rec){ try{ nasluch.rec.abort(); }catch(e){} nasluch.rec=null; } vadStop(); return; }
   if(nasluch.rec) return;
-  if(nasluch.vadOk!==false){ if(!vad.st) vadStart(); return; }      // czujnik głosu: rozpoznawanie dopiero, gdy ktoś mówi
+  if(nasluch.vadOk!==false){ if(!vad.st&&Date.now()-(nasluch.koniec||0)>1500) vadStart(); return; }   // przerwa po rozpoznawaniu: pyknięcie telefonu nie budzi czujnika      // czujnik głosu: rozpoznawanie dopiero, gdy ktoś mówi
   if(Date.now()-nasluch.start>Math.min(30000,600*Math.pow(2,nasluch.bledy))) nasluchStart(); },300);
 document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible'){ trzymajEkran(); } });
 // „Mów” ma pierwszeństwo przed nasłuchem (jeden mikrofon naraz)
