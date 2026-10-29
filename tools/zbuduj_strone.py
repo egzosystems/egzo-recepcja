@@ -24,6 +24,6 @@ if '--repo' in sys.argv:
     r = '<meta charset="utf-8">\n<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">\n' + r
     # wersja samodzielna (telefon/tablet poza Claude): podstawia window.claude, gdy strona nie jest w ramce Claude
     r = r.replace('<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">\n',
-                  '<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">\n<meta name="theme-color" content="#0b0a08">\n<script src="lib/samodzielna.js"></script>\n', 1)
+                  '<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">\n<meta name="theme-color" content="#0b0a08">\n<script src="lib/samodzielna.js?v=' + __import__('hashlib').md5((root / 'lib' / 'samodzielna.js').read_bytes()).hexdigest()[:8] + '"></script>\n', 1)
     out.write_text(r)
     print('wersja repo →', out)
