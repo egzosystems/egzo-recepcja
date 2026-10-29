@@ -2745,7 +2745,9 @@ const nasluch={on:false,rec:null,czeka:0,blokada:null,bledy:0,start:0};
 const nasluchChk=document.getElementById('nasluchChk');
 function bezOgonkow(t){ return t.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/ł/g,'l'); }
 const HASLO=/\b(?:hej|hey|hejze|ej|haj|hei)[\s,!.]*(?:egzo|ekso|egso|exo|eggzo|egzot|ekzo|egzu|exso|ekzu|egzon|ego)\b[\s,!.:]*/;
-function znajdzHaslo(t){ const n=bezOgonkow(t), m=HASLO.exec(n); if(!m) return null;
+// gdy rozpoznawanie ruszy w pół „Hej” (start po wykryciu głosu), wystarczy „Egzo” na początku zdania
+const HASLO_POCZ=/^\s*(?:egzo|ekso|egso|exo|eggzo|egzot|ekzo|egzu|exso|ekzu|egzon)\b[\s,!.:]*/;
+function znajdzHaslo(t){ const n=bezOgonkow(t), m=HASLO.exec(n)||HASLO_POCZ.exec(n); if(!m) return null;
   // reszta po haśle — z oryginalnego tekstu (te same długości po usunięciu znaków łączących liczymy po słowach)
   const slowaPrzed=n.slice(0,m.index+m[0].length).trim().split(/\s+/).filter(Boolean).length;
   return t.trim().split(/\s+/).slice(slowaPrzed).join(' ').replace(/^[,!.:\s]+/,''); }
@@ -2754,13 +2756,33 @@ function puscEkran(){ try{ nasluch.blokada&&nasluch.blokada.release(); }catch(e)
 function wyslijPolecenie(t){ t=t.replace(/\s+/g,' ').trim().slice(0,500); if(!t) return; nasluch.czeka=0;
   if(chatBusy){ setTimeout(()=>wyslijPolecenie(t),1500); return; } chatIn.value=t; chatForm.requestSubmit(); }
 function nasluchStatus(){ if(busy.v) return; setStatus(nasluch.czeka>Date.now()?'Słucham — co mam zrobić?':nasluch.on?'Słucha („Hej, Egzo”)':SAY[cur.id]); }
+/* Czujnik głosu: w ciszy rozpoznawanie mowy jest WYŁĄCZONE (Android pika przy każdym starcie/stopie rozpoznawania).
+   Mikrofon po cichu mierzy poziom dźwięku; dopiero gdy ktoś mówi (~0,15 s), włączamy rozpoznawanie na jedno zdanie. */
+const vad={st:null,ctx:null,an:null,buf:null,t:null,tlo:.01,nad:0,startuje:false};
+async function vadStart(){
+  if(vad.st||vad.startuje||!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){ if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia) nasluch.vadOk=false; return; }
+  vad.startuje=true;
+  try{
+    const st=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true}});
+    if(!nasluch.on){ st.getTracks().forEach(t=>t.stop()); return; }
+    vad.st=st; vad.ctx=vad.ctx||new (window.AudioContext||window.webkitAudioContext)(); if(vad.ctx.state==='suspended'){ try{ await vad.ctx.resume(); }catch(e){} }
+    const src=vad.ctx.createMediaStreamSource(st); vad.an=vad.ctx.createAnalyser(); vad.an.fftSize=1024; src.connect(vad.an); vad.buf=new Float32Array(vad.an.fftSize); vad.nad=0;
+    vad.t=setInterval(vadKrok,50); nasluch.vadOk=true;
+  }catch(e){ nasluch.vadOk=false; }
+  finally{ vad.startuje=false; }
+}
+function vadKrok(){ if(!vad.an) return; vad.an.getFloatTimeDomainData(vad.buf); let s=0; for(const x of vad.buf) s+=x*x; const rms=Math.sqrt(s/vad.buf.length);
+  if(rms<vad.tlo*2) vad.tlo=vad.tlo*.97+rms*.03;            // poziom tła (szum pokoju) uczy się sam
+  vad.nad=rms>Math.max(.012,vad.tlo*3.5)?vad.nad+1:0;
+  if(vad.nad>=3){ vadStop(); nasluchStart(); } }
+function vadStop(){ if(vad.t){ clearInterval(vad.t); vad.t=null; } if(vad.st){ vad.st.getTracks().forEach(t=>t.stop()); vad.st=null; } vad.an=null; }
 function nasluchStart(){
   const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
   if(!nasluch.on||nasluch.rec||glosWej.dziala||chatBusy||document.visibilityState!=='visible') return;
   if(typeof mowa!=='undefined'&&mowa.zajeta) return;
   if(!SR){ nasluchWylacz('Ta przeglądarka nie ma rozpoznawania mowy. Na telefonie otwórz recepcję w Chrome (Android) albo Safari (iPhone, iPad), albo mów przez mikrofon na klawiaturze.'); return; }
   try{
-    const r=new SR(); r.lang='pl-PL'; r.continuous=true; r.interimResults=true; r.maxAlternatives=3; nasluch.rec=r; nasluch.start=Date.now();
+    const r=new SR(); r.lang='pl-PL'; r.continuous=!nasluch.vadOk; r.interimResults=true; r.maxAlternatives=3; nasluch.rec=r; nasluch.start=Date.now();
     r.onresult=e=>{ nasluch.bledy=0;
       for(let i=e.resultIndex;i<e.results.length;i++){ const res=e.results[i]; if(!res.isFinal) continue;
         let t=res[0].transcript, reszta=null;
@@ -2772,23 +2794,28 @@ function nasluchStart(){
     r.onerror=e=>{ if(e.error==='not-allowed'||e.error==='service-not-allowed'||e.error==='audio-capture')
         nasluchWylacz(/Mobi|Android|iPhone|iPad/i.test(navigator.userAgent)?'Aplikacja Claude nie daje tej stronie mikrofonu, więc nasłuch się wyłączył. Spróbuj otworzyć ten link w Chrome (Android) albo Safari (iPhone/iPad). Na teraz: dotknij pola i mów przez mikrofon na klawiaturze — z „Trybem rozmowy” pole otwiera się samo po każdej jej odpowiedzi.':'Przeglądarka nie dała tej stronie mikrofonu. Zezwól na mikrofon (ikona kłódki przy adresie) albo użyj Obsidiana na komputerze.');
       else if(e.error==='network') nasluch.bledy++; };
-    r.onend=()=>{ nasluch.rec=null; nasluchStatus(); };
+    r.onend=()=>{ nasluch.rec=null; nasluchStatus();
+      // po samym „Hej, Egzo” słuchamy od razu dalej (polecenie), bez czekania na czujnik
+      if(nasluch.on&&nasluch.czeka>Date.now()) setTimeout(()=>{ if(!nasluch.rec) nasluchStart(); },150); };
     r.start();
   }catch(e){ nasluch.rec=null; nasluch.bledy++; }
 }
-function nasluchWylacz(info){ nasluch.on=false; nasluchChk.checked=false; store('egzo-nasluch',false); try{ nasluch.rec&&nasluch.rec.abort(); }catch(e){} nasluch.rec=null; puscEkran();
+function nasluchWylacz(info){ nasluch.on=false; nasluchChk.checked=false; store('egzo-nasluch',false); try{ nasluch.rec&&nasluch.rec.abort(); }catch(e){} nasluch.rec=null; vadStop(); puscEkran();
   if(info) document.getElementById('chatHint').textContent=info; nasluchStatus(); }
-nasluchChk.onchange=()=>{ if(nasluchChk.checked){ nasluch.on=true; nasluch.bledy=0; store('egzo-nasluch',true); trzymajEkran(); nasluchStart(); nasluchStatus(); } else nasluchWylacz(); };
+nasluchChk.onchange=()=>{ if(nasluchChk.checked){ nasluch.on=true; nasluch.bledy=0; store('egzo-nasluch',true); trzymajEkran(); vadStart().then(()=>{ if(nasluch.vadOk===false) nasluchStart(); }); nasluchStatus(); } else nasluchWylacz(); };
 // pętla: wstrzymaj, gdy ona mówi / czeka na odpowiedź; wznów, gdy cisza (z przerwą po błędach sieci)
 setInterval(()=>{ if(!nasluch.on) return;
   const mowi=(typeof mowa!=='undefined'&&mowa.zajeta)||chatBusy||glosWej.dziala;
-  if(mowi&&nasluch.rec){ try{ nasluch.rec.abort(); }catch(e){} nasluch.rec=null; return; }
-  if(!mowi&&!nasluch.rec&&Date.now()-nasluch.start>Math.min(30000,600*Math.pow(2,nasluch.bledy))) nasluchStart(); },300);
+  const ukryta=document.visibilityState!=='visible';
+  if(mowi||ukryta){ if(nasluch.rec){ try{ nasluch.rec.abort(); }catch(e){} nasluch.rec=null; } vadStop(); return; }
+  if(nasluch.rec) return;
+  if(nasluch.vadOk!==false){ if(!vad.st) vadStart(); return; }      // czujnik głosu: rozpoznawanie dopiero, gdy ktoś mówi
+  if(Date.now()-nasluch.start>Math.min(30000,600*Math.pow(2,nasluch.bledy))) nasluchStart(); },300);
 document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible'){ trzymajEkran(); } });
 // „Mów” ma pierwszeństwo przed nasłuchem (jeden mikrofon naraz)
-{ const stary=sluchaj; sluchaj=function(){ if(nasluch.rec){ try{ nasluch.rec.abort(); }catch(e){} nasluch.rec=null; } stary(); }; }
+{ const stary=sluchaj; sluchaj=function(){ if(nasluch.rec){ try{ nasluch.rec.abort(); }catch(e){} nasluch.rec=null; } vadStop(); stary(); }; }
 // włączony poprzednio: przeglądarka wymaga dotknięcia, więc wracamy przy pierwszym dotknięciu strony
-if(store('egzo-nasluch')){ nasluchChk.checked=true; const wznow=()=>{ removeEventListener('pointerdown',wznow,true); if(nasluchChk.checked){ nasluch.on=true; trzymajEkran(); nasluchStart(); nasluchStatus(); } }; addEventListener('pointerdown',wznow,true); }
+if(store('egzo-nasluch')){ nasluchChk.checked=true; const wznow=()=>{ removeEventListener('pointerdown',wznow,true); if(nasluchChk.checked){ nasluch.on=true; trzymajEkran(); vadStart().then(()=>{ if(nasluch.vadOk===false) nasluchStart(); }); nasluchStatus(); } }; addEventListener('pointerdown',wznow,true); }
 
 /* ---------- Obsidian: polecenia z wtyczki „EGZO Recepcja” (nasłuch „Hej, Egzo” działa na komputerze) ----------
    Wtyczka wysyła do strony {egzo:'glos', tekst} przez postMessage z okna nadrzędnego; strona odsyła {egzo:'stan', mowi}
